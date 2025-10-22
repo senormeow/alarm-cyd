@@ -35,6 +35,8 @@ use mipidsi::{
     options::{ColorOrder, Orientation, Rotation},
 };
 
+use alarm_cyd::xpt2046::Xpt2046;
+
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
@@ -107,6 +109,8 @@ async fn main(spawner: Spawner) -> ! {
     back_light.set_high();
     display.clear(Rgb565::BLACK).unwrap();
 
+    let mut touch_controller = Xpt2046::new(touch_device);
+
     let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
     let (mut _wifi_controller, _interfaces) =
         esp_radio::wifi::new(&radio_init, peripherals.WIFI, Default::default())
@@ -120,9 +124,13 @@ async fn main(spawner: Spawner) -> ! {
         .draw(&mut display)
         .unwrap();
 
+    touch_controller.init(&mut delay).unwrap();
+
     loop {
+        let touch_point = touch_controller.read_xy().unwrap();
+        info!("Touch point: {:?}", touch_point);
         info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
+        Timer::after(Duration::from_millis(100)).await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-rc.1/examples/src/bin
