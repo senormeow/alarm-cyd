@@ -124,12 +124,33 @@ async fn main(spawner: Spawner) -> ! {
         .draw(&mut display)
         .unwrap();
 
+    //draw a circle
+    Circle::new(Point::new(20, 25), 6)
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 3))
+        .draw(&mut display)
+        .unwrap();
+
+    Circle::new(Point::new(160, 220), 6)
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::GREEN, 3))
+        .draw(&mut display)
+        .unwrap();
+
+    Circle::new(Point::new(300, 110), 6)
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::BLUE, 3))
+        .draw(&mut display)
+        .unwrap();
+
     touch_controller.init(&mut delay).unwrap();
 
     loop {
-        let touch_point = touch_controller.read_xy().unwrap();
-        info!("Touch point: {:?}", touch_point);
-        info!("Hello world!");
+        let touch_point_raw = touch_controller.read_xy().unwrap();
+        let touch_point = touch_controller.read_touch_point().unwrap();
+        info!("Touch point: {:?}", touch_point_raw);
+        Circle::new(touch_point, 6)
+            .into_styled(PrimitiveStyle::with_stroke(Rgb565::WHITE, 3))
+            .draw(&mut display)
+            .unwrap();
+
         Timer::after(Duration::from_millis(100)).await;
     }
 

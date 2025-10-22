@@ -40,6 +40,27 @@ impl<E> Format for Error<E> {
 }
 
 #[derive(Debug)]
+pub struct CalibrationData {
+    pub alpha_x: f32,
+    pub beta_x: f32,
+    pub delta_x: f32,
+    pub alpha_y: f32,
+    pub beta_y: f32,
+    pub delta_y: f32,
+}
+
+fn calibration_data() -> CalibrationData {
+    CalibrationData {
+        alpha_x: 0.08792975,
+        beta_x: -0.0011090238,
+        delta_x: -17.84623,
+        alpha_y: -5.658285e-5,
+        beta_y: 0.068694405,
+        delta_y: -27.182854,
+    }
+}
+
+#[derive(Debug)]
 pub enum TouchScreenState {
     /// Driver waith for touch
     IDLE,
@@ -49,6 +70,14 @@ pub enum TouchScreenState {
     TOUCHED,
     /// Touch released
     RELEASED,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TouchScreenOperationMode {
+    /// Normal touch reading
+    NORMAL,
+    /// Manual calibration mode
+    CALIBRATION,
 }
 
 #[derive(Debug)]
@@ -97,8 +126,8 @@ pub struct Xpt2046<SPI> {
     screen_state: TouchScreenState,
     /// Buffer for the touch data samples
     ts: TouchSamples,
-    //calibration_data: CalibrationData,
-    //operation_mode: TouchScreenOperationMode,
+    calibration_data: CalibrationData,
+    operation_mode: TouchScreenOperationMode,
     // Location of the touch points used for
     // performing manual calibration
     //calibration_point: CalibrationPoint,
@@ -115,8 +144,8 @@ where
             rx_buff: [0; TX_BUFF_LEN],
             screen_state: TouchScreenState::IDLE,
             ts: TouchSamples::default(),
-            //calibration_data: orientation.calibration_data(),
-            //operation_mode: TouchScreenOperationMode::NORMAL,
+            calibration_data: calibration_data(),
+            operation_mode: TouchScreenOperationMode::NORMAL,
             //calibration_point: orientation.calibration_point(),
         }
     }
@@ -137,6 +166,30 @@ where
 
         let x = (self.rx_buff[1] as i32) << 8 | self.rx_buff[2] as i32;
         let y = (self.rx_buff[3] as i32) << 8 | self.rx_buff[4] as i32;
+        Ok(Point::new(x, y))
+    }
+
+    pub fn read_touch_point(&mut self) -> Result<Point, Error<BusError<SPIError>>> {
+        let raw_point = self.read_xy()?;
+
+        let (x, y) = match self.operation_mode {
+            TouchScreenOperationMode::NORMAL => {
+                let x = self.calibration_data.alpha_x * raw_point.x as f32
+                    + self.calibration_data.beta_x * raw_point.y as f32
+                    + self.calibration_data.delta_x;
+                let y = self.calibration_data.alpha_y * raw_point.x as f32
+                    + self.calibration_data.beta_y * raw_point.y as f32
+                    + self.calibration_data.delta_y;
+                (x as i32, y as i32)
+            }
+            TouchScreenOperationMode::CALIBRATION => {
+                /*
+                 * We're running calibration so just return raw
+                 * point measurements without compensation
+                 */
+                (raw_point.x, raw_point.y)
+            }
+        };
         Ok(Point::new(x, y))
     }
 
