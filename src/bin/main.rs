@@ -14,7 +14,13 @@ use embassy_time::{Duration, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
+use esp_hal::gpio::DriveMode;
 use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
+use esp_hal::ledc::{
+    LSGlobalClkSource, Ledc, LowSpeed,
+    channel::{self, ChannelIFace},
+    timer::{self, TimerIFace},
+};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
@@ -62,8 +68,27 @@ async fn main(spawner: Spawner) -> ! {
 
     info!("Embassy initialized!");
 
-    //Leds
+    // RGB LEDs (active-low: High = off, Low = on)
     let mut red_led = Output::new(peripherals.GPIO4, Level::High, OutputConfig::default());
+    let mut green_led = Output::new(peripherals.GPIO16, Level::High, OutputConfig::default());
+    let mut blue_led = Output::new(peripherals.GPIO17, Level::High, OutputConfig::default());
+
+    // Quick RGB LED cycle test
+    info!("LED test: Red");
+    red_led.set_low();
+    Timer::after(Duration::from_millis(300)).await;
+    red_led.set_high();
+
+    info!("LED test: Green");
+    green_led.set_low();
+    Timer::after(Duration::from_millis(300)).await;
+    green_led.set_high();
+
+    info!("LED test: Blue");
+    blue_led.set_low();
+    Timer::after(Duration::from_millis(300)).await;
+    blue_led.set_high();
+    info!("LED test done.");
 
     let spi_config1 = SpiConfig::default().with_frequency(Rate::from_mhz(40));
     let spi_config2 = SpiConfig::default().with_frequency(Rate::from_mhz(1));
@@ -110,6 +135,36 @@ async fn main(spawner: Spawner) -> ! {
     display.clear(Rgb565::BLACK).unwrap();
 
     let mut touch_controller = Xpt2046::new(touch_device);
+
+    // --- Speaker on GPIO 26 via LEDC PWM ---
+    let mut ledc = Ledc::new(peripherals.LEDC);
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+
+    let mut lstimer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    lstimer0
+        .configure(timer::config::Config {
+            duty: timer::config::Duty::Duty10Bit,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: Rate::from_khz(1), // 1 kHz audible tone
+        })
+        .expect("Failed to configure LEDC timer for speaker");
+
+    let mut speaker_channel = ledc.channel(channel::Number::Channel0, peripherals.GPIO26);
+    speaker_channel
+        .configure(channel::config::Config {
+            timer: &lstimer0,
+            duty_pct: 1, // 1% duty = lower volume
+            drive_mode: DriveMode::PushPull,
+        })
+        .expect("Failed to configure LEDC channel for speaker");
+
+    // Beep for 500 ms then silence
+    info!("Beeping speaker...");
+    Timer::after(Duration::from_millis(500)).await;
+    speaker_channel
+        .set_duty(0)
+        .expect("Failed to silence speaker");
+    info!("Speaker beep done.");
 
     let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
     let (mut _wifi_controller, _interfaces) =
