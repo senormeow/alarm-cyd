@@ -97,23 +97,37 @@ Navigates to a full-screen settings view with a "Back" button to return to the c
 - **Snooze duration** — picker in minutes (1–30, default 5)
 - **Auto-timeout** — picker in minutes (1–60, default 10)
 - **12h/24h format** — toggle between AM/PM and 24-hour display
-- **Theme** — color accent picker (affects clock text color, button highlights)
+- **Theme** — preset selector: Midnight (blue), Sunny (amber), Fire (red), Water (teal)
+
+**Themes (memory-efficient):**
+
+No bitmaps — themes are pure color sets applied via Slint properties. Each theme
+defines 5 colors. Background styling uses thin colored accent bars (top/bottom
+rectangles) rendered by Slint, zero memory overhead.
+
+| Theme    | Background | Clock text | Date text | Accent   | Accent bar     |
+|----------|-----------|------------|-----------|----------|----------------|
+| Midnight | #000000   | #c0c0ff   | #6060a0   | #4040cc  | #101030        |
+| Sunny    | #000000   | #ffe080   | #a08030   | #cc8800  | #1a1400        |
+| Fire     | #000000   | #ff6644   | #a04030   | #cc2200  | #1a0800        |
+| Water    | #000000   | #40e0d0   | #308080   | #008888  | #001414        |
 
 **Code structure:**
-- **`ui/main.slint`** — add a `settings-visible` bool property. When true, the settings
-  panel renders on top of the clock face. Settings values are `in-out` properties that
-  Rust reads/writes. A `settings-changed` callback notifies Rust when values change.
-- **`src/bin/main.rs`** — reads settings properties from Slint each frame or on callback,
-  applies timezone to `network::now()`, passes snooze/timeout to `Alarm`, formats time
-  in 12h/24h mode.
-- **`src/network.rs`** — `now()` takes a `UtcOffset` parameter instead of using a hardcoded
-  constant, so the main loop can pass the user-configured offset.
+- **`src/settings.rs`** — `Settings` struct (alarm time, tz offset, snooze mins,
+  timeout mins, use_12h, theme index), `Theme` struct with const color definitions,
+  `THEMES` array. Pure data, no hardware deps. Portable across ESP32/ESP32-S3.
+- **`ui/main.slint`** — `settings-visible` bool property toggles settings overlay.
+  Theme colors passed as Slint `color` properties from Rust. Settings values are
+  `in-out` properties. Callbacks notify Rust on changes.
+- **`src/bin/main.rs`** — reads settings from Slint, applies timezone via
+  `network::now_with_offset()`, passes snooze/timeout to `Alarm`, formats time
+  in 12h/24h. Only file with hardware deps.
+- **`src/network.rs`** — `now_with_offset(offset)` replaces hardcoded constant.
 
-**Main clock face styling:**
-- Clock text gets an accent color from the theme setting
-- Date line uses a muted version of the accent
-- Buttons pick up the theme color for highlights
-- Background stays black for contrast and power efficiency
+**Hardware abstraction principle:** `settings.rs`, `alarm.rs`, `slint_backend.rs`,
+and `network.rs` have zero hardware imports. Only `main.rs` touches `esp_hal`
+peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
+`Cargo.toml` features.
 
 ### 🔄 Phase 4 — Room Temperature (DS18B20)
 - [ ] One-wire driver on CN1 connector (GPIO22 or GPIO27, 4.7kΩ pull-up required)
