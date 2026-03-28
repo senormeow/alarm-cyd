@@ -6,6 +6,7 @@ export component MainWindow inherits Window {
     in-out property <string> time-text: "00:00:00";
     in-out property <string> date-text: "---";
     in-out property <string> room-temp-text: "";
+    in-out property <int> touch-count: 0;
 
     // Large centered clock
     Text {
@@ -38,5 +39,33 @@ export component MainWindow inherits Window {
         y: 218px;
         width: 100px;
         horizontal-alignment: right;
+    }
+
+    // Touch test button
+    Rectangle {
+        x: 110px;
+        y: 190px;
+        width: 100px;
+        height: 40px;
+        background: touch-area.pressed ? #404040 : #202020;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #606060;
+
+        touch-area := TouchArea {
+            clicked => {
+                root.touch-count += 1;
+            }
+        }
+
+        Text {
+            text: root.touch-count == 0 ? "Tap me" : "Taps: " + root.touch-count;
+            color: #ffffff;
+            font-size: 14px;
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
 }

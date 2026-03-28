@@ -8,7 +8,6 @@
 
 extern crate alloc;
 
-use alloc::rc::Rc;
 use core::cell::RefCell;
 use defmt::info;
 use display_interface_spi::SPIInterface;
@@ -29,82 +28,20 @@ use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 
-use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use mipidsi::Builder;
 use mipidsi::{
     models::ILI9341Rgb565,
     options::{ColorOrder, Orientation, Rotation},
 };
 
-use slint::platform::software_renderer::{
-    LineBufferProvider, MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel,
-};
+use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel};
 
+use alarm_cyd::network;
+use alarm_cyd::slint_backend::{DisplayLine, Esp32Platform};
 use alarm_cyd::xpt2046::Xpt2046;
 
 slint::include_modules!();
-
-// --- Slint platform backend ---
-
-struct Esp32Platform {
-    window: Rc<MinimalSoftwareWindow>,
-}
-
-impl slint::platform::Platform for Esp32Platform {
-    fn create_window_adapter(
-        &self,
-    ) -> Result<Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError> {
-        Ok(self.window.clone())
-    }
-
-    fn duration_since_start(&self) -> core::time::Duration {
-        let d = embassy_time::Duration::from_ticks(embassy_time::Instant::now().as_ticks());
-        core::time::Duration::from_millis(d.as_millis())
-    }
-}
-
-// --- Line-buffer renderer: sends one scanline at a time to the display ---
-
-struct DisplayLine<'a, D> {
-    display: &'a mut D,
-    line_buffer: [Rgb565Pixel; 320],
-}
-
-impl<D> LineBufferProvider for DisplayLine<'_, D>
-where
-    D: DrawTarget<Color = Rgb565>,
-{
-    type TargetPixel = Rgb565Pixel;
-
-    fn process_line(
-        &mut self,
-        y: usize,
-        range: core::ops::Range<usize>,
-        render_fn: impl FnOnce(&mut [Rgb565Pixel]),
-    ) {
-        let start = range.start;
-        let end = range.end;
-        render_fn(&mut self.line_buffer[start..end]);
-
-        self.display
-            .fill_contiguous(
-                &Rectangle::new(
-                    Point::new(start as i32, y as i32),
-                    Size::new((end - start) as u32, 1),
-                ),
-                self.line_buffer[start..end].iter().map(|p| {
-                    Rgb565::new(
-                        (p.0 >> 11) as u8 & 0x1F,
-                        (p.0 >> 5) as u8 & 0x3F,
-                        p.0 as u8 & 0x1F,
-                    )
-                }),
-            )
-            .ok();
-    }
-}
-
-// ---
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -214,7 +151,25 @@ async fn main(spawner: Spawner) -> ! {
     Timer::after(Duration::from_millis(500)).await;
     speaker_channel.set_duty(0).expect("speaker silence failed");
 
-    let _ = spawner;
+    // --- Wi-Fi + embassy-net ---
+    static RADIO: static_cell::StaticCell<esp_radio::Controller<'static>> =
+        static_cell::StaticCell::new();
+    let radio_init = RADIO.init(esp_radio::init().expect("radio init failed"));
+    let (wifi_controller, interfaces) =
+        esp_radio::wifi::new(radio_init, peripherals.WIFI, Default::default())
+            .expect("Wi-Fi init failed");
+
+    static NET_RESOURCES: static_cell::StaticCell<embassy_net::StackResources<3>> =
+        static_cell::StaticCell::new();
+    let (stack, runner) = embassy_net::new(
+        interfaces.sta,
+        embassy_net::Config::dhcpv4(Default::default()),
+        NET_RESOURCES.init(embassy_net::StackResources::new()),
+        1234u64,
+    );
+
+    spawner.spawn(network::net_task(runner)).unwrap();
+    spawner.spawn(network::wifi_task(wifi_controller, stack)).unwrap();
 
     // --- Set up Slint ---
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);

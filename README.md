@@ -2,28 +2,28 @@
 
 This is a project to write an alarm clock for the ESP32-2432S028 (aka "CYD") written in Rust using Embassy.
 
-So far the display, touch, speaker, and RGB LEDs are working.
+So far the display, touch, speaker, RGB LEDs, and Wi-Fi are working with a Slint GUI.
 
 ## Roadmap
 
 ### ✅ Phase 0 — Hardware Validation (complete)
-- [x] ILI9486 display over SPI2
+- [x] ILI9341 display over SPI2
 - [x] XPT2046 resistive touch over SPI3
 - [x] RGB LED (active-low, GPIO 4/16/17)
 - [x] Speaker PWM via LEDC (GPIO26)
 - [x] Wi-Fi radio initialized
 
 ### 🔄 Phase 1 — NTP Time Sync & Clock Display
-- [ ] Wi-Fi connection task
+- [x] Wi-Fi connection task
 - [ ] NTP UDP client (port 123)
 - [ ] Software RTC via embassy-time
-- [ ] Clock face display
+- [x] Clock face display
 
 ### 🔄 Phase 2 — Slint GUI
-- [ ] Slint embedded software renderer
-- [ ] Main clock UI (.slint file)
+- [x] Slint embedded software renderer
+- [x] Main clock UI (.slint file)
 - [ ] Alarm configuration screens
-- [ ] Touch input integration
+- [x] Touch input integration
 
 ### 🔄 Phase 3 — Alarm Engine
 - [ ] Alarm storage & time matching
