@@ -5,6 +5,7 @@
 //! On first boot (or corrupt data), returns None and the caller uses defaults.
 
 use crate::settings::Settings;
+use bincode::serde::{decode_from_slice, encode_into_slice};
 use defmt::info;
 
 /// Flash address for settings storage.
@@ -13,33 +14,30 @@ const SETTINGS_ADDR: u32 = 0x3F_F000;
 const SETTINGS_SECTOR: u32 = SETTINGS_ADDR / 4096;
 
 const MAGIC: u8 = 0xA5;
-const VERSION: u8 = 1;
+const VERSION: u8 = 2;
 
-// Wire format: [magic, version, alarm_hour, alarm_minute, alarm_am, alarm_enabled,
-//               utc_offset(as u8), snooze_minutes, timeout_minutes, use_12h,
-//               theme_index, checksum]
-const DATA_LEN: usize = 12; // must be multiple of 4 for flash alignment
-const PADDED_LEN: usize = 12; // already aligned
+// Wire format: [magic, version, bincode_data..., checksum]
+const PADDED_LEN: usize = 32; // must be multiple of 4 for flash alignment
 
 fn serialize(settings: &Settings) -> [u8; PADDED_LEN] {
     let mut buf = [0u8; PADDED_LEN];
     buf[0] = MAGIC;
     buf[1] = VERSION;
-    buf[2] = settings.alarm_hour;
-    buf[3] = settings.alarm_minute;
-    buf[4] = settings.alarm_am as u8;
-    buf[5] = settings.alarm_enabled as u8;
-    buf[6] = settings.utc_offset as u8; // i8 → u8 bit pattern
-    buf[7] = settings.snooze_minutes;
-    buf[8] = settings.timeout_minutes;
-    buf[9] = settings.use_12h as u8;
-    buf[10] = settings.theme_index;
-    // Simple checksum: XOR of bytes 0..11
+
+    // Serialize settings directly using bincode
+    let _ = encode_into_slice(
+        settings,
+        &mut buf[2..PADDED_LEN - 1],
+        bincode::config::standard(),
+    )
+    .expect("Buffer too small for serialization");
+
+    // Simple checksum: XOR of all bytes before checksum
     let mut cksum: u8 = 0;
-    for &b in &buf[..11] {
+    for &b in &buf[..PADDED_LEN - 1] {
         cksum ^= b;
     }
-    buf[11] = cksum;
+    buf[PADDED_LEN - 1] = cksum;
     buf
 }
 
@@ -49,23 +47,17 @@ fn deserialize(buf: &[u8; PADDED_LEN]) -> Option<Settings> {
     }
     // Verify checksum
     let mut cksum: u8 = 0;
-    for &b in &buf[..11] {
+    for &b in &buf[..PADDED_LEN - 1] {
         cksum ^= b;
     }
-    if cksum != buf[11] {
+    if cksum != buf[PADDED_LEN - 1] {
         return None;
     }
-    Some(Settings {
-        alarm_hour: buf[2],
-        alarm_minute: buf[3],
-        alarm_am: buf[4] != 0,
-        alarm_enabled: buf[5] != 0,
-        utc_offset: buf[6] as i8,
-        snooze_minutes: buf[7],
-        timeout_minutes: buf[8],
-        use_12h: buf[9] != 0,
-        theme_index: buf[10],
-    })
+
+    // Deserialize settings using bincode
+    let (settings, _) =
+        decode_from_slice(&buf[2..PADDED_LEN - 1], bincode::config::standard()).ok()?;
+    Some(settings)
 }
 
 /// Load settings from flash. Returns None on first boot or corrupt data.

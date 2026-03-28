@@ -173,7 +173,9 @@ async fn main(spawner: Spawner) -> ! {
     );
 
     spawner.spawn(network::net_task(runner)).unwrap();
-    spawner.spawn(network::wifi_task(wifi_controller, stack)).unwrap();
+    spawner
+        .spawn(network::wifi_task(wifi_controller, stack))
+        .unwrap();
 
     // --- Set up Slint ---
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
@@ -298,7 +300,9 @@ async fn main(spawner: Spawner) -> ! {
                 app.set_time_text(buf.as_str().into());
 
                 let mut dbuf = heapless::String::<16>::new();
-                let _ = write!(dbuf, "{} {} {}",
+                let _ = write!(
+                    dbuf,
+                    "{} {} {}",
                     match dt.weekday() {
                         time::Weekday::Sunday => "Sun",
                         time::Weekday::Monday => "Mon",
@@ -328,17 +332,8 @@ async fn main(spawner: Spawner) -> ! {
 
                 // Time-based alarm trigger (fires at :00 of the alarm minute)
                 if sec == 0 && settings.alarm_enabled && alarm.state() == AlarmState::Idle {
-                    let alarm_hour_24 = if settings.use_12h {
-                        match (settings.alarm_hour, settings.alarm_am) {
-                            (12, true) => 0,
-                            (h, true) => h,
-                            (12, false) => 12,
-                            (h, false) => h + 12,
-                        }
-                    } else {
-                        settings.alarm_hour
-                    };
-                    if dt.hour() == alarm_hour_24 && dt.minute() == settings.alarm_minute {
+                    if dt.hour() == settings.alarm_hour_24() && dt.minute() == settings.alarm_minute
+                    {
                         alarm.trigger();
                     }
                 }
@@ -363,9 +358,7 @@ async fn main(spawner: Spawner) -> ! {
         let action = alarm.tick();
 
         // Apply speaker
-        speaker_channel
-            .set_duty(action.speaker_duty)
-            .ok();
+        speaker_channel.set_duty(action.speaker_duty).ok();
 
         // Apply RGB LED
         if action.led_red {
@@ -408,9 +401,7 @@ async fn main(spawner: Spawner) -> ! {
                 });
                 was_touched = true;
             } else {
-                window.dispatch_event(slint::platform::WindowEvent::PointerMoved {
-                    position: pos,
-                });
+                window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position: pos });
             }
             last_touch_pos = pos;
         } else if was_touched {
@@ -423,12 +414,14 @@ async fn main(spawner: Spawner) -> ! {
 
         slint::platform::update_timers_and_animations();
 
-        window.draw_if_needed(|renderer: &slint::platform::software_renderer::SoftwareRenderer| {
-            renderer.render_by_line(DisplayLine {
-                display: &mut display,
-                line_buffer: [Rgb565Pixel(0); 320],
-            });
-        });
+        window.draw_if_needed(
+            |renderer: &slint::platform::software_renderer::SoftwareRenderer| {
+                renderer.render_by_line(DisplayLine {
+                    display: &mut display,
+                    line_buffer: [Rgb565Pixel(0); 320],
+                });
+            },
+        );
 
         Timer::after(Duration::from_millis(16)).await; // ~60 fps
     }

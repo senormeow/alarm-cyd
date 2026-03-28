@@ -70,6 +70,8 @@ embedded-hal = "1.0.0"
 slint = { version = "1.9", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 time = { version = "0.3", default-features = false }
 heapless = "0.8"
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
+bincode = { version = "2.0.1", default-features = false, features = ["serde"] }
 
 [build-dependencies]
 slint-build = "1.9"

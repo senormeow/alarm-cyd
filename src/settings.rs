@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// Color theme for the clock UI.
 #[derive(Clone, Copy)]
 pub struct Theme {
@@ -45,6 +47,7 @@ pub const THEMES: &[Theme] = &[
 ];
 
 /// All user-configurable settings.
+#[derive(Serialize, Deserialize)]
 pub struct Settings {
     /// Alarm hour (1-12 in 12h mode, 0-23 in 24h mode)
     pub alarm_hour: u8,

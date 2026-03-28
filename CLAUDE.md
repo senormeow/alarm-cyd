@@ -24,7 +24,7 @@ cargo build
 - `src/xpt2046/mod.rs` — touch driver with calibration (do not modify calibration data without re-calibrating)
 - `src/alarm.rs` — AlarmState machine (Idle/Ringing/Snoozed), speaker ramp, snooze countdown, auto-timeout
 - `src/settings.rs` — Settings struct, Theme/THEMES array (Midnight/Sunny/Fire/Water), Default impl
-- `src/storage.rs` — flash persistence via `esp_rom_spiflash_*` ROM calls; sector 0x3FF000, magic+version+XOR checksum
+- `src/storage.rs` — flash persistence via `esp_rom_spiflash_*` ROM calls; sector 0x3FF000, bincode/serde serialization with magic+version+XOR checksum
 - `ui/main.slint` — Slint UI: clock face, alarm buttons, full settings screen with all pickers
 - `build.rs` — must use `EmbedForSoftwareRenderer` (fonts are pre-baked at build time; without this, runtime font rendering OOMs the 98KB heap)
 

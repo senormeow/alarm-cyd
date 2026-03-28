@@ -131,7 +131,7 @@ peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
 
 ### ✅ Phase 2b — Settings Persistence (NVS) (complete)
 - [x] Reserve a flash sector for settings storage (after app partition)
-- [x] Serialize/deserialize Settings struct to raw bytes with magic + checksum
+- [x] Serialize/deserialize Settings struct to raw bytes using `serde` and `bincode` with magic + checksum
 - [x] Use `esp_rom_sys` spiflash functions (already in dep tree) for read/write/erase
 - [x] Load settings on boot, save on settings-changed callback
 - [x] Handle first-boot (uninitialized flash) gracefully with defaults
