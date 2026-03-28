@@ -10,148 +10,536 @@ export component MainWindow inherits Window {
     in-out property <string> alarm-status-text: "";
     in-out property <bool> alarm-flash: false;
 
+    // Theme colors (set from Rust)
+    in-out property <color> theme-bg: #000000;
+    in-out property <color> theme-clock: #c0c0ff;
+    in-out property <color> theme-date: #6060a0;
+    in-out property <color> theme-accent: #4040cc;
+    in-out property <color> theme-accent-bar: #101030;
+
+    // Settings
+    in-out property <bool> settings-visible: false;
+    in-out property <int> setting-alarm-hour: 7;
+    in-out property <int> setting-alarm-minute: 0;
+    in-out property <bool> setting-alarm-am: true;
+    in-out property <bool> setting-alarm-enabled: false;
+    in-out property <int> setting-utc-offset: -6;
+    in-out property <int> setting-snooze-min: 5;
+    in-out property <int> setting-timeout-min: 10;
+    in-out property <bool> setting-use-12h: true;
+    in-out property <int> setting-theme-index: 0;
+    in-out property <string> setting-theme-name: "Midnight";
+
     callback test-alarm();
     callback snooze-alarm();
     callback cancel-alarm();
+    callback settings-changed();
 
-    // Background: black normally, red flash when alarm rings
-    background: root.alarm-flash ? #400000 : #000000;
+    // Background
+    background: root.alarm-flash ? #400000 : root.theme-bg;
 
-    // Large centered clock
-    Text {
-        text: root.time-text;
-        color: root.alarm-flash ? #ff4444 : #ffffff;
-        font-size: 52px;
-        x: 0px;
-        y: 50px;
+    // Top accent bar
+    Rectangle {
+        x: 0px; y: 0px;
         width: parent.width;
-        horizontal-alignment: center;
+        height: 3px;
+        background: root.alarm-flash ? #ff0000 : root.theme-accent-bar;
     }
 
-    // Date / alarm status line
-    Text {
-        text: root.alarm-status-text != "" ? root.alarm-status-text : root.date-text;
-        color: root.alarm-state == 1 ? #ff4444 : (root.alarm-state == 2 ? #ffaa00 : #808080);
-        font-size: 18px;
-        x: 0px;
-        y: 120px;
+    // Bottom accent bar
+    Rectangle {
+        x: 0px; y: 237px;
         width: parent.width;
-        horizontal-alignment: center;
+        height: 3px;
+        background: root.alarm-flash ? #ff0000 : root.theme-accent-bar;
     }
 
-    // Room temperature bottom-right
-    Text {
-        text: root.room-temp-text;
-        color: #40a0ff;
-        font-size: 14px;
-        x: 210px;
-        y: 218px;
-        width: 100px;
-        horizontal-alignment: right;
+    // ==================== CLOCK FACE ====================
+    if !root.settings-visible : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+
+        // Large centered clock
+        Text {
+            text: root.time-text;
+            color: root.alarm-flash ? #ff4444 : root.theme-clock;
+            font-size: 52px;
+            x: 0px;
+            y: 50px;
+            width: parent.width;
+            horizontal-alignment: center;
+        }
+
+        // Date / alarm status line
+        Text {
+            text: root.alarm-status-text != "" ? root.alarm-status-text : root.date-text;
+            color: root.alarm-state == 1 ? #ff4444 : (root.alarm-state == 2 ? #ffaa00 : root.theme-date);
+            font-size: 18px;
+            x: 0px;
+            y: 120px;
+            width: parent.width;
+            horizontal-alignment: center;
+        }
+
+        // Room temperature bottom-right
+        Text {
+            text: root.room-temp-text;
+            color: root.theme-accent;
+            font-size: 14px;
+            x: 210px;
+            y: 218px;
+            width: 100px;
+            horizontal-alignment: right;
+        }
+
+        // Alarm indicator (top-right) — shows set time when enabled
+        if root.setting-alarm-enabled && root.alarm-state == 0 : Text {
+            text: root.setting-use-12h
+                ? (root.setting-alarm-hour < 10 ? " " + root.setting-alarm-hour : root.setting-alarm-hour)
+                  + ":" + (root.setting-alarm-minute < 10 ? "0" + root.setting-alarm-minute : root.setting-alarm-minute)
+                  + (root.setting-alarm-am ? "AM" : "PM")
+                : (root.setting-alarm-hour < 10 ? "0" + root.setting-alarm-hour : root.setting-alarm-hour)
+                  + ":" + (root.setting-alarm-minute < 10 ? "0" + root.setting-alarm-minute : root.setting-alarm-minute);
+            color: root.theme-accent;
+            font-size: 14px;
+            x: 240px;
+            y: 8px;
+            width: 72px;
+            horizontal-alignment: right;
+        }
+
+        // Settings gear button (bottom-left)
+        if root.alarm-state == 0 : Rectangle {
+            x: 8px;
+            y: 200px;
+            width: 34px;
+            height: 34px;
+            background: ta-settings.pressed ? #404040 : #202020;
+            border-radius: 17px;
+            border-width: 1px;
+            border-color: #606060;
+
+            ta-settings := TouchArea {
+                clicked => { root.settings-visible = true; }
+            }
+
+            // Gear icon (text stand-in)
+            Text {
+                text: "*";
+                color: root.theme-accent;
+                font-size: 22px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Idle: Test Alarm button
+        if root.alarm-state == 0 : Rectangle {
+            x: 110px;
+            y: 180px;
+            width: 100px;
+            height: 40px;
+            background: ta-test.pressed ? #404040 : #202020;
+            border-radius: 5px;
+            border-width: 1px;
+            border-color: #606060;
+
+            ta-test := TouchArea {
+                clicked => { root.test-alarm(); }
+            }
+
+            Text {
+                text: "Test Alarm";
+                color: #ffffff;
+                font-size: 14px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Ringing: Snooze + Cancel
+        if root.alarm-state == 1 : Rectangle {
+            x: 20px; y: 180px; width: 130px; height: 44px;
+            background: ta-snooze.pressed ? #555500 : #333300;
+            border-radius: 5px;
+            border-width: 1px;
+            border-color: #888800;
+
+            ta-snooze := TouchArea {
+                clicked => { root.snooze-alarm(); }
+            }
+
+            Text {
+                text: "Snooze";
+                color: #ffff00;
+                font-size: 18px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.alarm-state == 1 : Rectangle {
+            x: 170px; y: 180px; width: 130px; height: 44px;
+            background: ta-cancel1.pressed ? #550000 : #330000;
+            border-radius: 5px;
+            border-width: 1px;
+            border-color: #880000;
+
+            ta-cancel1 := TouchArea {
+                clicked => { root.cancel-alarm(); }
+            }
+
+            Text {
+                text: "Cancel";
+                color: #ff4444;
+                font-size: 18px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Snoozed: Cancel button centered
+        if root.alarm-state == 2 : Rectangle {
+            x: 110px; y: 180px; width: 100px; height: 40px;
+            background: ta-cancel2.pressed ? #550000 : #330000;
+            border-radius: 5px;
+            border-width: 1px;
+            border-color: #880000;
+
+            ta-cancel2 := TouchArea {
+                clicked => { root.cancel-alarm(); }
+            }
+
+            Text {
+                text: "Cancel";
+                color: #ff4444;
+                font-size: 14px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
     }
 
-    // --- Alarm buttons ---
+    // ==================== SETTINGS SCREEN ====================
+    if root.settings-visible : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #0a0a0a;
 
-    // Idle: Test Alarm button
-    if root.alarm-state == 0 : Rectangle {
-        x: 110px;
-        y: 180px;
-        width: 100px;
-        height: 40px;
-        background: ta-test.pressed ? #404040 : #202020;
-        border-radius: 5px;
-        border-width: 1px;
-        border-color: #606060;
+        // Title
+        Text {
+            text: "Settings";
+            color: root.theme-clock;
+            font-size: 22px;
+            x: 10px; y: 6px;
+        }
 
-        ta-test := TouchArea {
-            clicked => { root.test-alarm(); }
+        // Back button
+        Rectangle {
+            x: 250px; y: 4px; width: 60px; height: 28px;
+            background: ta-back.pressed ? #404040 : #202020;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #606060;
+
+            ta-back := TouchArea {
+                clicked => {
+                    root.settings-visible = false;
+                    root.settings-changed();
+                }
+            }
+
+            Text {
+                text: "Back";
+                color: root.theme-accent;
+                font-size: 14px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // --- Row 1: Alarm time ---
+        Text {
+            text: "Alarm";
+            color: #808080;
+            font-size: 14px;
+            x: 10px; y: 40px;
+        }
+
+        // Hour -
+        Rectangle {
+            x: 80px; y: 36px; width: 28px; height: 24px;
+            background: ta-hm.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-hm := TouchArea {
+                clicked => {
+                    if (root.setting-use-12h) {
+                        root.setting-alarm-hour = root.setting-alarm-hour <= 1 ? 12 : root.setting-alarm-hour - 1;
+                    } else {
+                        root.setting-alarm-hour = root.setting-alarm-hour <= 0 ? 23 : root.setting-alarm-hour - 1;
+                    }
+                }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // Hour display
+        Text {
+            text: root.setting-alarm-hour < 10 ? "0" + root.setting-alarm-hour : root.setting-alarm-hour;
+            color: #ffffff;
+            font-size: 16px;
+            x: 112px; y: 40px;
+            width: 24px;
+            horizontal-alignment: center;
+        }
+
+        // Hour +
+        Rectangle {
+            x: 140px; y: 36px; width: 28px; height: 24px;
+            background: ta-hp.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-hp := TouchArea {
+                clicked => {
+                    if (root.setting-use-12h) {
+                        root.setting-alarm-hour = root.setting-alarm-hour >= 12 ? 1 : root.setting-alarm-hour + 1;
+                    } else {
+                        root.setting-alarm-hour = root.setting-alarm-hour >= 23 ? 0 : root.setting-alarm-hour + 1;
+                    }
+                }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Text { text: ":"; color: #ffffff; font-size: 16px; x: 170px; y: 40px; }
+
+        // Minute -
+        Rectangle {
+            x: 180px; y: 36px; width: 28px; height: 24px;
+            background: ta-mm.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-mm := TouchArea {
+                clicked => { root.setting-alarm-minute = root.setting-alarm-minute <= 0 ? 59 : root.setting-alarm-minute - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // Minute display
+        Text {
+            text: root.setting-alarm-minute < 10 ? "0" + root.setting-alarm-minute : root.setting-alarm-minute;
+            color: #ffffff;
+            font-size: 16px;
+            x: 212px; y: 40px;
+            width: 24px;
+            horizontal-alignment: center;
+        }
+
+        // Minute +
+        Rectangle {
+            x: 240px; y: 36px; width: 28px; height: 24px;
+            background: ta-mp.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-mp := TouchArea {
+                clicked => { root.setting-alarm-minute = root.setting-alarm-minute >= 59 ? 0 : root.setting-alarm-minute + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // AM/PM toggle (only if 12h mode)
+        if root.setting-use-12h : Rectangle {
+            x: 275px; y: 36px; width: 36px; height: 24px;
+            background: ta-ampm.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-ampm := TouchArea {
+                clicked => { root.setting-alarm-am = !root.setting-alarm-am; }
+            }
+            Text {
+                text: root.setting-alarm-am ? "AM" : "PM";
+                color: root.setting-alarm-am ? #80c0ff : #ffaa44;
+                font-size: 12px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // --- Row 2: Alarm enabled + 12h/24h ---
+        Text { text: "Enabled"; color: #808080; font-size: 14px; x: 10px; y: 70px; }
+
+        Rectangle {
+            x: 80px; y: 66px; width: 44px; height: 24px;
+            background: root.setting-alarm-enabled ? #225522 : #332222;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: root.setting-alarm-enabled ? #44aa44 : #664444;
+
+            TouchArea {
+                clicked => { root.setting-alarm-enabled = !root.setting-alarm-enabled; }
+            }
+            Text {
+                text: root.setting-alarm-enabled ? "ON" : "OFF";
+                color: root.setting-alarm-enabled ? #44ff44 : #ff4444;
+                font-size: 12px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text { text: "Format"; color: #808080; font-size: 14px; x: 150px; y: 70px; }
+
+        Rectangle {
+            x: 210px; y: 66px; width: 54px; height: 24px;
+            background: ta-fmt.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-fmt := TouchArea {
+                clicked => { root.setting-use-12h = !root.setting-use-12h; }
+            }
+            Text {
+                text: root.setting-use-12h ? "12h" : "24h";
+                color: #ffffff;
+                font-size: 12px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // --- Row 3: Timezone ---
+        Text { text: "UTC"; color: #808080; font-size: 14px; x: 10px; y: 100px; }
+
+        Rectangle {
+            x: 50px; y: 96px; width: 28px; height: 24px;
+            background: ta-tzm.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-tzm := TouchArea {
+                clicked => { root.setting-utc-offset = root.setting-utc-offset <= -12 ? -12 : root.setting-utc-offset - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
         }
 
         Text {
-            text: "Test Alarm";
+            text: root.setting-utc-offset >= 0 ? "+" + root.setting-utc-offset : root.setting-utc-offset;
+            color: #ffffff;
+            font-size: 16px;
+            x: 82px; y: 100px;
+            width: 36px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            x: 122px; y: 96px; width: 28px; height: 24px;
+            background: ta-tzp.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-tzp := TouchArea {
+                clicked => { root.setting-utc-offset = root.setting-utc-offset >= 14 ? 14 : root.setting-utc-offset + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // --- Row 3 continued: Snooze ---
+        Text { text: "Snooze"; color: #808080; font-size: 14px; x: 170px; y: 100px; }
+
+        Rectangle {
+            x: 230px; y: 96px; width: 28px; height: 24px;
+            background: ta-snm.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-snm := TouchArea {
+                clicked => { root.setting-snooze-min = root.setting-snooze-min <= 1 ? 1 : root.setting-snooze-min - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Text {
+            text: root.setting-snooze-min + "m";
             color: #ffffff;
             font-size: 14px;
-            width: parent.width;
-            height: parent.height;
+            x: 260px; y: 100px;
+            width: 30px;
             horizontal-alignment: center;
-            vertical-alignment: center;
         }
-    }
 
-    // Ringing: Snooze + Cancel buttons
-    if root.alarm-state == 1 : Rectangle {
-        x: 20px;
-        y: 180px;
-        width: 130px;
-        height: 44px;
-        background: ta-snooze.pressed ? #555500 : #333300;
-        border-radius: 5px;
-        border-width: 1px;
-        border-color: #888800;
+        Rectangle {
+            x: 292px; y: 96px; width: 24px; height: 24px;
+            background: ta-snp.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-snp := TouchArea {
+                clicked => { root.setting-snooze-min = root.setting-snooze-min >= 30 ? 30 : root.setting-snooze-min + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
 
-        ta-snooze := TouchArea {
-            clicked => { root.snooze-alarm(); }
+        // --- Row 4: Timeout + Theme ---
+        Text { text: "Timeout"; color: #808080; font-size: 14px; x: 10px; y: 130px; }
+
+        Rectangle {
+            x: 75px; y: 126px; width: 28px; height: 24px;
+            background: ta-tom.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-tom := TouchArea {
+                clicked => { root.setting-timeout-min = root.setting-timeout-min <= 1 ? 1 : root.setting-timeout-min - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
         }
 
         Text {
-            text: "Snooze";
-            color: #ffff00;
-            font-size: 18px;
-            width: parent.width;
-            height: parent.height;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-    }
-
-    if root.alarm-state == 1 : Rectangle {
-        x: 170px;
-        y: 180px;
-        width: 130px;
-        height: 44px;
-        background: ta-cancel1.pressed ? #550000 : #330000;
-        border-radius: 5px;
-        border-width: 1px;
-        border-color: #880000;
-
-        ta-cancel1 := TouchArea {
-            clicked => { root.cancel-alarm(); }
-        }
-
-        Text {
-            text: "Cancel";
-            color: #ff4444;
-            font-size: 18px;
-            width: parent.width;
-            height: parent.height;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-    }
-
-    // Snoozed: Cancel button centered
-    if root.alarm-state == 2 : Rectangle {
-        x: 110px;
-        y: 180px;
-        width: 100px;
-        height: 40px;
-        background: ta-cancel2.pressed ? #550000 : #330000;
-        border-radius: 5px;
-        border-width: 1px;
-        border-color: #880000;
-
-        ta-cancel2 := TouchArea {
-            clicked => { root.cancel-alarm(); }
-        }
-
-        Text {
-            text: "Cancel";
-            color: #ff4444;
+            text: root.setting-timeout-min + "m";
+            color: #ffffff;
             font-size: 14px;
-            width: parent.width;
-            height: parent.height;
+            x: 107px; y: 130px;
+            width: 36px;
             horizontal-alignment: center;
-            vertical-alignment: center;
+        }
+
+        Rectangle {
+            x: 145px; y: 126px; width: 28px; height: 24px;
+            background: ta-top.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-top := TouchArea {
+                clicked => { root.setting-timeout-min = root.setting-timeout-min >= 60 ? 60 : root.setting-timeout-min + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Text { text: "Theme"; color: #808080; font-size: 14px; x: 195px; y: 130px; }
+
+        Rectangle {
+            x: 250px; y: 126px; width: 60px; height: 24px;
+            background: ta-theme.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: root.theme-accent;
+
+            ta-theme := TouchArea {
+                clicked => {
+                    root.setting-theme-index = mod(root.setting-theme-index + 1, 4);
+                    root.settings-changed();
+                }
+            }
+            Text {
+                text: root.setting-theme-name;
+                color: root.theme-clock;
+                font-size: 11px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
     }
 }

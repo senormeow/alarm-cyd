@@ -129,16 +129,24 @@ and `network.rs` have zero hardware imports. Only `main.rs` touches `esp_hal`
 peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
 `Cargo.toml` features.
 
-### 🔄 Phase 4 — Room Temperature (DS18B20)
-- [ ] One-wire driver on CN1 connector (GPIO22 or GPIO27, 4.7kΩ pull-up required)
-- [ ] DS18B20 temperature read & parse
-- [ ] Display on clock face
+### 🔄 Phase 2b — Settings Persistence (NVS)
+- [ ] Reserve a flash sector for settings storage (after app partition)
+- [ ] Serialize/deserialize Settings struct to raw bytes with magic + checksum
+- [ ] Use `esp_rom_sys` spiflash functions (already in dep tree) for read/write/erase
+- [ ] Load settings on boot, save on settings-changed callback
+- [ ] Handle first-boot (uninitialized flash) gracefully with defaults
 
-### 🔄 Phase 5 — Weather Service
+### 🔄 Phase 4 — Weather Service
 - [ ] HTTP client via embassy-net TCP
 - [ ] Open-Meteo API integration (free, no API key)
 - [ ] JSON parsing (serde_json_core)
 - [ ] Outside temp & forecast display
+
+
+### 🔄 Phase 5 — Room Temperature (DS18B20)
+- [ ] One-wire driver on CN1 connector (GPIO22 or GPIO27, 4.7kΩ pull-up required)
+- [ ] DS18B20 temperature read & parse
+- [ ] Display on clock face
 
 ## Building
 

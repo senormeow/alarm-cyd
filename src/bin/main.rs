@@ -40,6 +40,7 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferTyp
 
 use alarm_cyd::alarm::{Alarm, AlarmState};
 use alarm_cyd::network;
+use alarm_cyd::settings::Settings;
 use alarm_cyd::slint_backend::{DisplayLine, Esp32Platform};
 use alarm_cyd::xpt2046::Xpt2046;
 
@@ -187,13 +188,53 @@ async fn main(spawner: Spawner) -> ! {
     app.set_date_text("Connecting...".into());
     app.show().unwrap();
 
-    // Alarm state machine
+    // Settings + alarm
+    let mut settings = Settings::default();
     let mut alarm = Alarm::new();
+
+    // Apply default settings to Slint
+    fn apply_theme(app: &MainWindow, settings: &Settings) {
+        let t = settings.theme();
+        app.set_theme_bg(slint_color(t.bg));
+        app.set_theme_clock(slint_color(t.clock_text));
+        app.set_theme_date(slint_color(t.date_text));
+        app.set_theme_accent(slint_color(t.accent));
+        app.set_theme_accent_bar(slint_color(t.accent_bar));
+        app.set_setting_theme_name(t.name.into());
+    }
+
+    fn push_settings_to_slint(app: &MainWindow, settings: &Settings) {
+        app.set_setting_alarm_hour(settings.alarm_hour as i32);
+        app.set_setting_alarm_minute(settings.alarm_minute as i32);
+        app.set_setting_alarm_am(settings.alarm_am);
+        app.set_setting_alarm_enabled(settings.alarm_enabled);
+        app.set_setting_utc_offset(settings.utc_offset as i32);
+        app.set_setting_snooze_min(settings.snooze_minutes as i32);
+        app.set_setting_timeout_min(settings.timeout_minutes as i32);
+        app.set_setting_use_12h(settings.use_12h);
+        app.set_setting_theme_index(settings.theme_index as i32);
+        apply_theme(app, settings);
+    }
+
+    fn pull_settings_from_slint(app: &MainWindow, settings: &mut Settings) {
+        settings.alarm_hour = app.get_setting_alarm_hour() as u8;
+        settings.alarm_minute = app.get_setting_alarm_minute() as u8;
+        settings.alarm_am = app.get_setting_alarm_am();
+        settings.alarm_enabled = app.get_setting_alarm_enabled();
+        settings.utc_offset = app.get_setting_utc_offset() as i8;
+        settings.snooze_minutes = app.get_setting_snooze_min() as u8;
+        settings.timeout_minutes = app.get_setting_timeout_min() as u8;
+        settings.use_12h = app.get_setting_use_12h();
+        settings.theme_index = app.get_setting_theme_index() as u8;
+    }
+
+    push_settings_to_slint(&app, &settings);
 
     // Slint callbacks — use shared flags polled in main loop
     let alarm_trigger = Rc::new(Cell::new(false));
     let alarm_snooze = Rc::new(Cell::new(false));
     let alarm_cancel = Rc::new(Cell::new(false));
+    let settings_dirty = Rc::new(Cell::new(false));
 
     app.on_test_alarm({
         let flag = alarm_trigger.clone();
@@ -207,6 +248,10 @@ async fn main(spawner: Spawner) -> ! {
         let flag = alarm_cancel.clone();
         move || flag.set(true)
     });
+    app.on_settings_changed({
+        let flag = settings_dirty.clone();
+        move || flag.set(true)
+    });
 
     // Touch state
     let mut was_touched = false;
@@ -218,14 +263,34 @@ async fn main(spawner: Spawner) -> ! {
     // and draw target circles at screen coordinates (20,25), (160,220), (300,110),
     // then record the raw XPT2046 values and update CalibrationData in src/xpt2046/mod.rs.
     loop {
+        // Sync settings when changed in UI
+        if settings_dirty.get() {
+            settings_dirty.set(false);
+            pull_settings_from_slint(&app, &mut settings);
+            apply_theme(&app, &settings);
+            alarm.snooze_duration = Duration::from_secs(settings.snooze_minutes as u64 * 60);
+            alarm.auto_timeout = Duration::from_secs(settings.timeout_minutes as u64 * 60);
+        }
+
         // Update clock display when the second changes
-        if let Some(dt) = network::now() {
+        if let Some(dt) = network::now_with_offset(settings.utc_offset) {
             let sec = dt.second();
             if sec != last_sec {
                 last_sec = sec;
                 use core::fmt::Write;
                 let mut buf = heapless::String::<16>::new();
-                let _ = write!(buf, "{:02}:{:02}:{:02}", dt.hour(), dt.minute(), sec);
+                if settings.use_12h {
+                    let h = dt.hour();
+                    let (h12, ampm) = match h {
+                        0 => (12, "AM"),
+                        1..=11 => (h, "AM"),
+                        12 => (12, "PM"),
+                        _ => (h - 12, "PM"),
+                    };
+                    let _ = write!(buf, "{:2}:{:02}:{:02} {}", h12, dt.minute(), sec, ampm);
+                } else {
+                    let _ = write!(buf, "{:02}:{:02}:{:02}", dt.hour(), dt.minute(), sec);
+                }
                 app.set_time_text(buf.as_str().into());
 
                 let mut dbuf = heapless::String::<16>::new();
@@ -346,4 +411,12 @@ async fn main(spawner: Spawner) -> ! {
 
         Timer::after(Duration::from_millis(16)).await; // ~60 fps
     }
+}
+
+fn slint_color(rgb: u32) -> slint::Color {
+    slint::Color::from_rgb_u8(
+        ((rgb >> 16) & 0xFF) as u8,
+        ((rgb >> 8) & 0xFF) as u8,
+        (rgb & 0xFF) as u8,
+    )
 }

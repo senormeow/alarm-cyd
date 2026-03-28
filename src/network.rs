@@ -10,10 +10,6 @@ use time::{OffsetDateTime, UtcOffset};
 const WIFI_SSID: &str = "REDACTED_SSID";
 const WIFI_PASSWORD: &str = "REDACTED_PASSWORD";
 
-/// UTC offset for display. Change to your timezone.
-/// Examples: UTC-6 (CST) = -6, UTC-5 (CDT/EST) = -5, UTC+0 = 0
-const UTC_OFFSET_HOURS: i8 = -6;
-
 // time.google.com — fixed IPs, no DNS needed
 const NTP_SERVER: Ipv4Address = Ipv4Address::new(216, 239, 35, 0);
 const NTP_PORT: u16 = 123;
@@ -28,15 +24,15 @@ struct TimeSync {
 
 static TIME_SYNC: Mutex<RefCell<Option<TimeSync>>> = Mutex::new(RefCell::new(None));
 
-/// Get current time as OffsetDateTime, or None if NTP hasn't synced yet.
-pub fn now() -> Option<OffsetDateTime> {
+/// Get current time as OffsetDateTime with the given UTC offset, or None if NTP hasn't synced.
+pub fn now_with_offset(utc_offset_hours: i8) -> Option<OffsetDateTime> {
     let unix_secs = critical_section::with(|cs| {
         TIME_SYNC.borrow_ref(cs).as_ref().map(|sync| {
             let elapsed = (Instant::now() - sync.instant).as_secs();
             sync.unix_secs + elapsed
         })
     })?;
-    let offset = UtcOffset::from_hms(UTC_OFFSET_HOURS, 0, 0).ok()?;
+    let offset = UtcOffset::from_hms(utc_offset_hours, 0, 0).ok()?;
     OffsetDateTime::from_unix_timestamp(unix_secs as i64)
         .ok()
         .map(|dt| dt.to_offset(offset))
