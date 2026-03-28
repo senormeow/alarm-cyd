@@ -67,6 +67,10 @@ mipidsi = "0.8.0"
 embedded-graphics = { version = "0.8.1", features = ["defmt"] }
 embedded-graphics-core = "0.4.0"
 embedded-hal = "1.0.0"
+slint = { version = "1.9", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
+
+[build-dependencies]
+slint-build = "1.9"
 
 
 [profile.dev]

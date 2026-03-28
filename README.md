@@ -4,6 +4,44 @@ This is a project to write an alarm clock for the ESP32-2432S028 (aka "CYD") wri
 
 So far the display, touch, speaker, and RGB LEDs are working.
 
+## Roadmap
+
+### ✅ Phase 0 — Hardware Validation (complete)
+- [x] ILI9486 display over SPI2
+- [x] XPT2046 resistive touch over SPI3
+- [x] RGB LED (active-low, GPIO 4/16/17)
+- [x] Speaker PWM via LEDC (GPIO26)
+- [x] Wi-Fi radio initialized
+
+### 🔄 Phase 1 — NTP Time Sync & Clock Display
+- [ ] Wi-Fi connection task
+- [ ] NTP UDP client (port 123)
+- [ ] Software RTC via embassy-time
+- [ ] Clock face display
+
+### 🔄 Phase 2 — Slint GUI
+- [ ] Slint embedded software renderer
+- [ ] Main clock UI (.slint file)
+- [ ] Alarm configuration screens
+- [ ] Touch input integration
+
+### 🔄 Phase 3 — Alarm Engine
+- [ ] Alarm storage & time matching
+- [ ] Speaker PWM alarm with ramp-up
+- [ ] Snooze via touch
+- [ ] RGB LED alarm indicator
+
+### 🔄 Phase 4 — Room Temperature (DS18B20)
+- [ ] One-wire driver on CN1 connector (GPIO22 or GPIO27, 4.7kΩ pull-up required)
+- [ ] DS18B20 temperature read & parse
+- [ ] Display on clock face
+
+### 🔄 Phase 5 — Weather Service
+- [ ] HTTP client via embassy-net TCP
+- [ ] Open-Meteo API integration (free, no API key)
+- [ ] JSON parsing (serde_json_core)
+- [ ] Outside temp & forecast display
+
 ## Building
 
 Source the ESP toolchain environment before building:
@@ -54,8 +92,9 @@ Runs at 1 MHz.
 
 ### Display
 
-The display is an ILI9486-based 2.8" 320×480 TFT driven over SPI2. The driver is
-configured for RGB565 color, landscape orientation (Rotation::Deg90).
+The display is an ILI9341-based 2.8" 240×320 TFT driven over SPI2. The driver is
+configured for RGB565 color, landscape orientation (Rotation::Deg90), giving a
+320×240 usable area.
 
 | Pin    | Function       |
 |--------|----------------|

@@ -1,0 +1,42 @@
+export component MainWindow inherits Window {
+    width: 320px;
+    height: 240px;
+    background: #000000;
+
+    in-out property <string> time-text: "00:00:00";
+    in-out property <string> date-text: "---";
+    in-out property <string> room-temp-text: "";
+
+    // Large centered clock
+    Text {
+        text: root.time-text;
+        color: #ffffff;
+        font-size: 52px;
+        x: 0px;
+        y: 60px;
+        width: parent.width;
+        horizontal-alignment: center;
+    }
+
+    // Date below the clock
+    Text {
+        text: root.date-text;
+        color: #808080;
+        font-size: 18px;
+        x: 0px;
+        y: 150px;
+        width: parent.width;
+        horizontal-alignment: center;
+    }
+
+    // Room temperature bottom-right
+    Text {
+        text: root.room-temp-text;
+        color: #40a0ff;
+        font-size: 14px;
+        x: 210px;
+        y: 218px;
+        width: 100px;
+        horizontal-alignment: right;
+    }
+}
