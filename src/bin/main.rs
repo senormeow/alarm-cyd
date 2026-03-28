@@ -81,7 +81,7 @@ async fn main(spawner: Spawner) -> ! {
     // SPI2 @ 40 MHz — display (ILI9341)
     let spi_bus = Spi::new(
         peripherals.SPI2,
-        SpiConfig::default().with_frequency(Rate::from_mhz(40)),
+        SpiConfig::default().with_frequency(Rate::from_mhz(80)),
     )
     .unwrap()
     .with_sck(peripherals.GPIO14)
@@ -181,19 +181,61 @@ async fn main(spawner: Spawner) -> ! {
     .unwrap();
 
     let app = MainWindow::new().unwrap();
-    app.set_time_text("00:00:00".into());
-    app.set_date_text("Smart Alarm".into());
+    app.set_time_text("--:--:--".into());
+    app.set_date_text("Connecting...".into());
     app.show().unwrap();
 
     // Touch state
     let mut was_touched = false;
     let mut last_touch_pos = slint::LogicalPosition::new(0.0_f32, 0.0_f32);
+    let mut last_sec: u8 = 255;
 
     // --- Main loop ---
     // Calibration reference: to re-calibrate, switch touch_controller to CALIBRATION mode
     // and draw target circles at screen coordinates (20,25), (160,220), (300,110),
     // then record the raw XPT2046 values and update CalibrationData in src/xpt2046/mod.rs.
     loop {
+        // Update clock display when the second changes
+        if let Some(dt) = network::now() {
+            let sec = dt.second();
+            if sec != last_sec {
+                last_sec = sec;
+                use core::fmt::Write;
+                let mut buf = heapless::String::<16>::new();
+                let _ = write!(buf, "{:02}:{:02}:{:02}", dt.hour(), dt.minute(), sec);
+                app.set_time_text(buf.as_str().into());
+
+                let mut dbuf = heapless::String::<16>::new();
+                let _ = write!(dbuf, "{} {} {}",
+                    match dt.weekday() {
+                        time::Weekday::Sunday => "Sun",
+                        time::Weekday::Monday => "Mon",
+                        time::Weekday::Tuesday => "Tue",
+                        time::Weekday::Wednesday => "Wed",
+                        time::Weekday::Thursday => "Thu",
+                        time::Weekday::Friday => "Fri",
+                        time::Weekday::Saturday => "Sat",
+                    },
+                    match dt.month() {
+                        time::Month::January => "Jan",
+                        time::Month::February => "Feb",
+                        time::Month::March => "Mar",
+                        time::Month::April => "Apr",
+                        time::Month::May => "May",
+                        time::Month::June => "Jun",
+                        time::Month::July => "Jul",
+                        time::Month::August => "Aug",
+                        time::Month::September => "Sep",
+                        time::Month::October => "Oct",
+                        time::Month::November => "Nov",
+                        time::Month::December => "Dec",
+                    },
+                    dt.day(),
+                );
+                app.set_date_text(dbuf.as_str().into());
+            }
+        }
+
         let is_touched = touch_irq.is_low();
 
         if is_touched {
