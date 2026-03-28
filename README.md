@@ -13,23 +13,107 @@ So far the display, touch, speaker, RGB LEDs, and Wi-Fi are working with a Slint
 - [x] Speaker PWM via LEDC (GPIO26)
 - [x] Wi-Fi radio initialized
 
-### 🔄 Phase 1 — NTP Time Sync & Clock Display
+### ✅ Phase 1 — NTP Time Sync & Clock Display (complete)
 - [x] Wi-Fi connection task
-- [ ] NTP UDP client (port 123)
-- [ ] Software RTC via embassy-time
-- [x] Clock face display
+- [x] NTP UDP client (port 123, time.google.com)
+- [x] Software RTC via embassy-time (NTP sync + elapsed tracking)
+- [x] Clock face display (HH:MM:SS, weekday/month/day)
 
-### 🔄 Phase 2 — Slint GUI
+### 🔄 Phase 2 — Slint GUI & Settings
 - [x] Slint embedded software renderer
 - [x] Main clock UI (.slint file)
-- [ ] Alarm configuration screens
 - [x] Touch input integration
+- [ ] AM/PM time format
+- [ ] Settings screen (alarm time, timezone, snooze duration)
+- [ ] Color theming
 
-### 🔄 Phase 3 — Alarm Engine
-- [ ] Alarm storage & time matching
-- [ ] Speaker PWM alarm with ramp-up
-- [ ] Snooze via touch
-- [ ] RGB LED alarm indicator
+### ✅ Phase 3 — Alarm Engine (complete)
+
+#### Alarm State Machine
+
+The alarm runs as a simple state machine driven from the main loop:
+
+```
+              ┌──────────┐
+              │   Idle   │ ◄──── Cancel button OR auto-timeout
+              └────┬─────┘
+                   │ trigger (test button now; time match later)
+                   ▼
+              ┌──────────┐
+              │ Ringing  │ ── speaker beeps, display flashes red, RGB LED red
+              └────┬─────┘
+                   │ Snooze button
+                   ▼
+              ┌──────────┐
+              │ Snoozed  │ ── silent, 5-min countdown shown on display
+              └────┬─────┘
+                   │ timer expires
+                   ▼
+              (back to Ringing)
+```
+
+#### Behavior
+
+- **Ringing**: Speaker beeps in a pattern (e.g., 500ms on / 500ms off). Duty ramps
+  up gradually over ~30s from 1% to 5%. Display background flashes red/black each
+  cycle. RGB LED solid red.
+- **Snooze**: Silences speaker, turns off LED, returns display to normal clock face.
+  Shows "Snooze 4:59" countdown on the date line. After snooze duration (default 5
+  minutes, user-configurable), returns to Ringing.
+- **Cancel**: Fully stops the alarm, returns to Idle. Resets all state.
+- **Auto-timeout**: If the alarm rings continuously for the auto-timeout duration
+  (default 10 minutes, user-configurable) without user interaction, it cancels
+  itself (vacation safeguard).
+
+#### UI Layout (during alarm)
+
+The clock face stays visible. The bottom area changes based on state:
+- **Idle**: "Test Alarm" button (replaces current "Tap me" button)
+- **Ringing**: "Snooze" and "Cancel" buttons side by side, background pulses red
+- **Snoozed**: "Cancel" button, date line shows snooze countdown
+
+#### Code Structure
+
+- **`src/alarm.rs`** — alarm state machine (`AlarmState` enum, transition logic,
+  timing). Pure logic, no hardware. Exposes `tick()` method called from main loop
+  that returns `AlarmAction` (beep on/off, LED on/off, flash on/off). Snooze
+  duration and auto-timeout are configurable fields so they can later be wired
+  to a settings screen.
+- **`ui/main.slint`** — add `alarm-state` property (int: 0=idle, 1=ringing, 2=snoozed),
+  `alarm-status-text` property, callbacks for snooze/cancel/test buttons. Conditional
+  UI layout based on alarm-state.
+- **`src/bin/main.rs`** — main loop calls `alarm.tick()`, applies actions to speaker
+  channel and RGB LED, sets Slint properties. Handles Slint callbacks to drive
+  state transitions.
+
+#### Settings Screen Design
+
+Accessed via a "Settings" gear/button on the main clock face (bottom-left corner).
+Navigates to a full-screen settings view with a "Back" button to return to the clock.
+
+**Settings to expose:**
+- **Alarm time** — hour and minute pickers (touch +/- buttons), AM/PM toggle, enable/disable
+- **Timezone** — UTC offset picker (-12 to +14), shown as "UTC-6" style
+- **Snooze duration** — picker in minutes (1–30, default 5)
+- **Auto-timeout** — picker in minutes (1–60, default 10)
+- **12h/24h format** — toggle between AM/PM and 24-hour display
+- **Theme** — color accent picker (affects clock text color, button highlights)
+
+**Code structure:**
+- **`ui/main.slint`** — add a `settings-visible` bool property. When true, the settings
+  panel renders on top of the clock face. Settings values are `in-out` properties that
+  Rust reads/writes. A `settings-changed` callback notifies Rust when values change.
+- **`src/bin/main.rs`** — reads settings properties from Slint each frame or on callback,
+  applies timezone to `network::now()`, passes snooze/timeout to `Alarm`, formats time
+  in 12h/24h mode.
+- **`src/network.rs`** — `now()` takes a `UtcOffset` parameter instead of using a hardcoded
+  constant, so the main loop can pass the user-configured offset.
+
+**Main clock face styling:**
+- Clock text gets an accent color from the theme setting
+- Date line uses a muted version of the accent
+- Buttons pick up the theme color for highlights
+- Background stays black for contrast and power efficiency
 
 ### 🔄 Phase 4 — Room Temperature (DS18B20)
 - [ ] One-wire driver on CN1 connector (GPIO22 or GPIO27, 4.7kΩ pull-up required)

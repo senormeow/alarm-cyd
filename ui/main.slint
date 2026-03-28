@@ -1,31 +1,40 @@
 export component MainWindow inherits Window {
     width: 320px;
     height: 240px;
-    background: #000000;
 
     in-out property <string> time-text: "00:00:00";
     in-out property <string> date-text: "---";
     in-out property <string> room-temp-text: "";
-    in-out property <int> touch-count: 0;
+    // 0 = idle, 1 = ringing, 2 = snoozed
+    in-out property <int> alarm-state: 0;
+    in-out property <string> alarm-status-text: "";
+    in-out property <bool> alarm-flash: false;
+
+    callback test-alarm();
+    callback snooze-alarm();
+    callback cancel-alarm();
+
+    // Background: black normally, red flash when alarm rings
+    background: root.alarm-flash ? #400000 : #000000;
 
     // Large centered clock
     Text {
         text: root.time-text;
-        color: #ffffff;
+        color: root.alarm-flash ? #ff4444 : #ffffff;
         font-size: 52px;
         x: 0px;
-        y: 60px;
+        y: 50px;
         width: parent.width;
         horizontal-alignment: center;
     }
 
-    // Date below the clock
+    // Date / alarm status line
     Text {
-        text: root.date-text;
-        color: #808080;
+        text: root.alarm-status-text != "" ? root.alarm-status-text : root.date-text;
+        color: root.alarm-state == 1 ? #ff4444 : (root.alarm-state == 2 ? #ffaa00 : #808080);
         font-size: 18px;
         x: 0px;
-        y: 150px;
+        y: 120px;
         width: parent.width;
         horizontal-alignment: center;
     }
@@ -41,26 +50,103 @@ export component MainWindow inherits Window {
         horizontal-alignment: right;
     }
 
-    // Touch test button
-    Rectangle {
+    // --- Alarm buttons ---
+
+    // Idle: Test Alarm button
+    if root.alarm-state == 0 : Rectangle {
         x: 110px;
-        y: 190px;
+        y: 180px;
         width: 100px;
         height: 40px;
-        background: touch-area.pressed ? #404040 : #202020;
+        background: ta-test.pressed ? #404040 : #202020;
         border-radius: 5px;
         border-width: 1px;
         border-color: #606060;
 
-        touch-area := TouchArea {
-            clicked => {
-                root.touch-count += 1;
-            }
+        ta-test := TouchArea {
+            clicked => { root.test-alarm(); }
         }
 
         Text {
-            text: root.touch-count == 0 ? "Tap me" : "Taps: " + root.touch-count;
+            text: "Test Alarm";
             color: #ffffff;
+            font-size: 14px;
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Ringing: Snooze + Cancel buttons
+    if root.alarm-state == 1 : Rectangle {
+        x: 20px;
+        y: 180px;
+        width: 130px;
+        height: 44px;
+        background: ta-snooze.pressed ? #555500 : #333300;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #888800;
+
+        ta-snooze := TouchArea {
+            clicked => { root.snooze-alarm(); }
+        }
+
+        Text {
+            text: "Snooze";
+            color: #ffff00;
+            font-size: 18px;
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    if root.alarm-state == 1 : Rectangle {
+        x: 170px;
+        y: 180px;
+        width: 130px;
+        height: 44px;
+        background: ta-cancel1.pressed ? #550000 : #330000;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #880000;
+
+        ta-cancel1 := TouchArea {
+            clicked => { root.cancel-alarm(); }
+        }
+
+        Text {
+            text: "Cancel";
+            color: #ff4444;
+            font-size: 18px;
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Snoozed: Cancel button centered
+    if root.alarm-state == 2 : Rectangle {
+        x: 110px;
+        y: 180px;
+        width: 100px;
+        height: 40px;
+        background: ta-cancel2.pressed ? #550000 : #330000;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #880000;
+
+        ta-cancel2 := TouchArea {
+            clicked => { root.cancel-alarm(); }
+        }
+
+        Text {
+            text: "Cancel";
+            color: #ff4444;
             font-size: 14px;
             width: parent.width;
             height: parent.height;

@@ -8,7 +8,8 @@
 
 extern crate alloc;
 
-use core::cell::RefCell;
+use alloc::rc::Rc;
+use core::cell::{Cell, RefCell};
 use defmt::info;
 use display_interface_spi::SPIInterface;
 use embassy_executor::Spawner;
@@ -37,6 +38,7 @@ use mipidsi::{
 
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel};
 
+use alarm_cyd::alarm::{Alarm, AlarmState};
 use alarm_cyd::network;
 use alarm_cyd::slint_backend::{DisplayLine, Esp32Platform};
 use alarm_cyd::xpt2046::Xpt2046;
@@ -185,6 +187,27 @@ async fn main(spawner: Spawner) -> ! {
     app.set_date_text("Connecting...".into());
     app.show().unwrap();
 
+    // Alarm state machine
+    let mut alarm = Alarm::new();
+
+    // Slint callbacks — use shared flags polled in main loop
+    let alarm_trigger = Rc::new(Cell::new(false));
+    let alarm_snooze = Rc::new(Cell::new(false));
+    let alarm_cancel = Rc::new(Cell::new(false));
+
+    app.on_test_alarm({
+        let flag = alarm_trigger.clone();
+        move || flag.set(true)
+    });
+    app.on_snooze_alarm({
+        let flag = alarm_snooze.clone();
+        move || flag.set(true)
+    });
+    app.on_cancel_alarm({
+        let flag = alarm_cancel.clone();
+        move || flag.set(true)
+    });
+
     // Touch state
     let mut was_touched = false;
     let mut last_touch_pos = slint::LogicalPosition::new(0.0_f32, 0.0_f32);
@@ -236,6 +259,57 @@ async fn main(spawner: Spawner) -> ! {
             }
         }
 
+        // Process alarm callbacks from Slint
+        if alarm_trigger.get() {
+            alarm_trigger.set(false);
+            alarm.trigger();
+        }
+        if alarm_snooze.get() {
+            alarm_snooze.set(false);
+            alarm.snooze();
+        }
+        if alarm_cancel.get() {
+            alarm_cancel.set(false);
+            alarm.cancel();
+        }
+
+        // Tick alarm state machine
+        let action = alarm.tick();
+
+        // Apply speaker
+        speaker_channel
+            .set_duty(action.speaker_duty)
+            .ok();
+
+        // Apply RGB LED
+        if action.led_red {
+            red_led.set_low(); // active-low
+        } else {
+            red_led.set_high();
+        }
+
+        // Update Slint alarm state
+        let state_int = match alarm.state() {
+            AlarmState::Idle => 0,
+            AlarmState::Ringing => 1,
+            AlarmState::Snoozed => 2,
+        };
+        app.set_alarm_state(state_int);
+        app.set_alarm_flash(action.flash_red);
+
+        // Update alarm status text
+        if let Some(text) = action.status_text {
+            app.set_alarm_status_text(text.into());
+        } else if let Some((mins, secs)) = action.snooze_text {
+            use core::fmt::Write;
+            let mut sbuf = heapless::String::<20>::new();
+            let _ = write!(sbuf, "Snooze {}:{:02}", mins, secs);
+            app.set_alarm_status_text(sbuf.as_str().into());
+        } else {
+            app.set_alarm_status_text("".into());
+        }
+
+        // Touch input
         let is_touched = touch_irq.is_low();
 
         if is_touched {
