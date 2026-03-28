@@ -2,7 +2,7 @@
 
 This is a project to write an alarm clock for the ESP32-2432S028 (aka "CYD") written in Rust using Embassy.
 
-So far the display, touch, speaker, RGB LEDs, and Wi-Fi are working with a Slint GUI.
+Display, touch, speaker, RGB LEDs, Wi-Fi, NTP clock, Slint GUI, full settings screen, color theming, alarm engine, and flash-based settings persistence are all working.
 
 ## Roadmap
 
@@ -19,13 +19,13 @@ So far the display, touch, speaker, RGB LEDs, and Wi-Fi are working with a Slint
 - [x] Software RTC via embassy-time (NTP sync + elapsed tracking)
 - [x] Clock face display (HH:MM:SS, weekday/month/day)
 
-### 🔄 Phase 2 — Slint GUI & Settings
+### ✅ Phase 2 — Slint GUI & Settings (complete)
 - [x] Slint embedded software renderer
 - [x] Main clock UI (.slint file)
 - [x] Touch input integration
-- [ ] AM/PM time format
-- [ ] Settings screen (alarm time, timezone, snooze duration)
-- [ ] Color theming
+- [x] AM/PM time format
+- [x] Settings screen (alarm time, timezone, snooze duration)
+- [x] Color theming
 
 ### ✅ Phase 3 — Alarm Engine (complete)
 
@@ -37,7 +37,7 @@ The alarm runs as a simple state machine driven from the main loop:
               ┌──────────┐
               │   Idle   │ ◄──── Cancel button OR auto-timeout
               └────┬─────┘
-                   │ trigger (test button now; time match later)
+                   │ trigger (test button OR time match at :00 of alarm minute)
                    ▼
               ┌──────────┐
               │ Ringing  │ ── speaker beeps, display flashes red, RGB LED red
@@ -129,12 +129,12 @@ and `network.rs` have zero hardware imports. Only `main.rs` touches `esp_hal`
 peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
 `Cargo.toml` features.
 
-### 🔄 Phase 2b — Settings Persistence (NVS)
-- [ ] Reserve a flash sector for settings storage (after app partition)
-- [ ] Serialize/deserialize Settings struct to raw bytes with magic + checksum
-- [ ] Use `esp_rom_sys` spiflash functions (already in dep tree) for read/write/erase
-- [ ] Load settings on boot, save on settings-changed callback
-- [ ] Handle first-boot (uninitialized flash) gracefully with defaults
+### ✅ Phase 2b — Settings Persistence (NVS) (complete)
+- [x] Reserve a flash sector for settings storage (after app partition)
+- [x] Serialize/deserialize Settings struct to raw bytes with magic + checksum
+- [x] Use `esp_rom_sys` spiflash functions (already in dep tree) for read/write/erase
+- [x] Load settings on boot, save on settings-changed callback
+- [x] Handle first-boot (uninitialized flash) gracefully with defaults
 
 ### 🔄 Phase 4 — Weather Service
 - [ ] HTTP client via embassy-net TCP

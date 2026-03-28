@@ -18,11 +18,14 @@ cargo build
 - **Wi-Fi**: esp-radio + embassy-net, credentials in `src/network.rs`
 
 ## Architecture
-- `src/bin/main.rs` — entry point, hardware init, Slint main loop
+- `src/bin/main.rs` — entry point, hardware init, Slint main loop, alarm time-match trigger
 - `src/slint_backend.rs` — Esp32Platform + DisplayLine (Slint rendering adapter)
-- `src/network.rs` — Wi-Fi connection task, embassy-net stack runner
+- `src/network.rs` — Wi-Fi connection task, embassy-net stack runner, `now_with_offset()`
 - `src/xpt2046/mod.rs` — touch driver with calibration (do not modify calibration data without re-calibrating)
-- `ui/main.slint` — Slint UI definition
+- `src/alarm.rs` — AlarmState machine (Idle/Ringing/Snoozed), speaker ramp, snooze countdown, auto-timeout
+- `src/settings.rs` — Settings struct, Theme/THEMES array (Midnight/Sunny/Fire/Water), Default impl
+- `src/storage.rs` — flash persistence via `esp_rom_spiflash_*` ROM calls; sector 0x3FF000, magic+version+XOR checksum
+- `ui/main.slint` — Slint UI: clock face, alarm buttons, full settings screen with all pickers
 - `build.rs` — must use `EmbedForSoftwareRenderer` (fonts are pre-baked at build time; without this, runtime font rendering OOMs the 98KB heap)
 
 ## Key Constraints

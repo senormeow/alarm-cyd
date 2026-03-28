@@ -42,6 +42,7 @@ use alarm_cyd::alarm::{Alarm, AlarmState};
 use alarm_cyd::network;
 use alarm_cyd::settings::Settings;
 use alarm_cyd::slint_backend::{DisplayLine, Esp32Platform};
+use alarm_cyd::storage;
 use alarm_cyd::xpt2046::Xpt2046;
 
 slint::include_modules!();
@@ -188,9 +189,11 @@ async fn main(spawner: Spawner) -> ! {
     app.set_date_text("Connecting...".into());
     app.show().unwrap();
 
-    // Settings + alarm
-    let mut settings = Settings::default();
+    // Settings + alarm — load from flash or use defaults
+    let mut settings = storage::load().unwrap_or_default();
     let mut alarm = Alarm::new();
+    alarm.snooze_duration = Duration::from_secs(settings.snooze_minutes as u64 * 60);
+    alarm.auto_timeout = Duration::from_secs(settings.timeout_minutes as u64 * 60);
 
     // Apply default settings to Slint
     fn apply_theme(app: &MainWindow, settings: &Settings) {
@@ -270,6 +273,7 @@ async fn main(spawner: Spawner) -> ! {
             apply_theme(&app, &settings);
             alarm.snooze_duration = Duration::from_secs(settings.snooze_minutes as u64 * 60);
             alarm.auto_timeout = Duration::from_secs(settings.timeout_minutes as u64 * 60);
+            storage::save(&settings);
         }
 
         // Update clock display when the second changes
@@ -321,6 +325,23 @@ async fn main(spawner: Spawner) -> ! {
                     dt.day(),
                 );
                 app.set_date_text(dbuf.as_str().into());
+
+                // Time-based alarm trigger (fires at :00 of the alarm minute)
+                if sec == 0 && settings.alarm_enabled && alarm.state() == AlarmState::Idle {
+                    let alarm_hour_24 = if settings.use_12h {
+                        match (settings.alarm_hour, settings.alarm_am) {
+                            (12, true) => 0,
+                            (h, true) => h,
+                            (12, false) => 12,
+                            (h, false) => h + 12,
+                        }
+                    } else {
+                        settings.alarm_hour
+                    };
+                    if dt.hour() == alarm_hour_24 && dt.minute() == settings.alarm_minute {
+                        alarm.trigger();
+                    }
+                }
             }
         }
 
