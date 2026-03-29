@@ -30,7 +30,11 @@ export component MainWindow inherits Window {
     in-out property <bool> setting-use-12h: true;
     in-out property <int> setting-theme-index: 0;
     in-out property <string> setting-theme-name: "Midnight";
-    in-out property <int> setting-zip: 0;
+    in-out property <int> setting-zip-d0: 0;
+    in-out property <int> setting-zip-d1: 0;
+    in-out property <int> setting-zip-d2: 0;
+    in-out property <int> setting-zip-d3: 0;
+    in-out property <int> setting-zip-d4: 0;
 
     callback test-alarm();
     callback snooze-alarm();
@@ -555,40 +559,137 @@ export component MainWindow inherits Window {
             }
         }
 
-        // --- Row 5: ZIP code ---
-        Text { text: "ZIP"; color: #808080; font-size: 14px; x: 10px; y: 160px; }
+        // --- Row 5: ZIP code (per-digit editor) ---
+        Text { text: "ZIP"; color: #808080; font-size: 14px; x: 10px; y: 174px; }
 
+        // Digit 0 (ten-thousands)
         Rectangle {
-            x: 50px; y: 156px; width: 28px; height: 24px;
-            background: ta-zipm.pressed ? #404040 : #252525;
+            x: 58px; y: 154px; width: 36px; height: 20px;
+            background: ta-z0p.pressed ? #404040 : #252525;
             border-radius: 3px;
-            ta-zipm := TouchArea {
-                clicked => { root.setting-zip = root.setting-zip <= 0 ? 99999 : root.setting-zip - 1; }
+            ta-z0p := TouchArea {
+                clicked => { root.setting-zip-d0 = root.setting-zip-d0 >= 9 ? 0 : root.setting-zip-d0 + 1; }
             }
-            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+            Text { text: "+"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
         }
-
         Text {
-            text: root.setting-zip < 10 ? "0000" + root.setting-zip
-                : root.setting-zip < 100 ? "000" + root.setting-zip
-                : root.setting-zip < 1000 ? "00" + root.setting-zip
-                : root.setting-zip < 10000 ? "0" + root.setting-zip
-                : root.setting-zip;
-            color: #ffffff;
-            font-size: 14px;
-            x: 82px; y: 160px;
-            width: 60px;
+            text: root.setting-zip-d0;
+            color: #ffffff; font-size: 18px;
+            x: 58px; y: 175px; width: 36px;
             horizontal-alignment: center;
         }
-
         Rectangle {
-            x: 145px; y: 156px; width: 28px; height: 24px;
-            background: ta-zipp.pressed ? #404040 : #252525;
+            x: 58px; y: 196px; width: 36px; height: 20px;
+            background: ta-z0m.pressed ? #404040 : #252525;
             border-radius: 3px;
-            ta-zipp := TouchArea {
-                clicked => { root.setting-zip = root.setting-zip >= 99999 ? 0 : root.setting-zip + 1; }
+            ta-z0m := TouchArea {
+                clicked => { root.setting-zip-d0 = root.setting-zip-d0 <= 0 ? 9 : root.setting-zip-d0 - 1; }
             }
-            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+            Text { text: "-"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // Digit 1 (thousands)
+        Rectangle {
+            x: 100px; y: 154px; width: 36px; height: 20px;
+            background: ta-z1p.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z1p := TouchArea {
+                clicked => { root.setting-zip-d1 = root.setting-zip-d1 >= 9 ? 0 : root.setting-zip-d1 + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+        Text {
+            text: root.setting-zip-d1;
+            color: #ffffff; font-size: 18px;
+            x: 100px; y: 175px; width: 36px;
+            horizontal-alignment: center;
+        }
+        Rectangle {
+            x: 100px; y: 196px; width: 36px; height: 20px;
+            background: ta-z1m.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z1m := TouchArea {
+                clicked => { root.setting-zip-d1 = root.setting-zip-d1 <= 0 ? 9 : root.setting-zip-d1 - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // Digit 2 (hundreds)
+        Rectangle {
+            x: 142px; y: 154px; width: 36px; height: 20px;
+            background: ta-z2p.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z2p := TouchArea {
+                clicked => { root.setting-zip-d2 = root.setting-zip-d2 >= 9 ? 0 : root.setting-zip-d2 + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+        Text {
+            text: root.setting-zip-d2;
+            color: #ffffff; font-size: 18px;
+            x: 142px; y: 175px; width: 36px;
+            horizontal-alignment: center;
+        }
+        Rectangle {
+            x: 142px; y: 196px; width: 36px; height: 20px;
+            background: ta-z2m.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z2m := TouchArea {
+                clicked => { root.setting-zip-d2 = root.setting-zip-d2 <= 0 ? 9 : root.setting-zip-d2 - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // Digit 3 (tens)
+        Rectangle {
+            x: 184px; y: 154px; width: 36px; height: 20px;
+            background: ta-z3p.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z3p := TouchArea {
+                clicked => { root.setting-zip-d3 = root.setting-zip-d3 >= 9 ? 0 : root.setting-zip-d3 + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+        Text {
+            text: root.setting-zip-d3;
+            color: #ffffff; font-size: 18px;
+            x: 184px; y: 175px; width: 36px;
+            horizontal-alignment: center;
+        }
+        Rectangle {
+            x: 184px; y: 196px; width: 36px; height: 20px;
+            background: ta-z3m.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z3m := TouchArea {
+                clicked => { root.setting-zip-d3 = root.setting-zip-d3 <= 0 ? 9 : root.setting-zip-d3 - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // Digit 4 (ones)
+        Rectangle {
+            x: 226px; y: 154px; width: 36px; height: 20px;
+            background: ta-z4p.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z4p := TouchArea {
+                clicked => { root.setting-zip-d4 = root.setting-zip-d4 >= 9 ? 0 : root.setting-zip-d4 + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+        Text {
+            text: root.setting-zip-d4;
+            color: #ffffff; font-size: 18px;
+            x: 226px; y: 175px; width: 36px;
+            horizontal-alignment: center;
+        }
+        Rectangle {
+            x: 226px; y: 196px; width: 36px; height: 20px;
+            background: ta-z4m.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-z4m := TouchArea {
+                clicked => { root.setting-zip-d4 = root.setting-zip-d4 <= 0 ? 9 : root.setting-zip-d4 - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 14px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
         }
     }
 }

@@ -7,8 +7,8 @@ use embassy_time::{Duration, Instant, Timer, with_timeout};
 use esp_radio::wifi::{ClientConfig, ModeConfig, WifiController, WifiDevice};
 use time::{OffsetDateTime, UtcOffset};
 
-const WIFI_SSID: &str = "REDACTED_SSID";
-const WIFI_PASSWORD: &str = "REDACTED_PASSWORD";
+const WIFI_SSID: &str = env!("WIFI_SSID");
+const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
 
 // time.google.com — fixed IPs, no DNS needed
 const NTP_SERVER: Ipv4Address = Ipv4Address::new(216, 239, 35, 0);

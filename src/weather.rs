@@ -17,6 +17,19 @@ pub enum WeatherError {
     NotFound,
 }
 
+impl WeatherError {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::InvalidZip => "bad ZIP",
+            Self::Network => "net error",
+            Self::Timeout => "timeout",
+            Self::ResponseTooLarge => "buf overflow",
+            Self::Parse => "parse error",
+            Self::NotFound => "not found",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Weather {
     pub temperature_f: i16,
@@ -35,6 +48,7 @@ pub struct WeatherState {
     pub last_attempt: Option<Instant>,
     pub last_ok_unix: Option<u64>,
     pub refresh_now: bool,
+    pub cached_geo: Option<([u8; 5], GeoLocation)>,
 }
 
 impl Default for WeatherState {
@@ -46,6 +60,7 @@ impl Default for WeatherState {
             last_attempt: None,
             last_ok_unix: None,
             refresh_now: false,
+            cached_geo: None,
         }
     }
 }
@@ -57,6 +72,7 @@ static WEATHER_STATE: Mutex<RefCell<WeatherState>> = Mutex::new(RefCell::new(Wea
     last_attempt: None,
     last_ok_unix: None,
     refresh_now: false,
+    cached_geo: None,
 }));
 
 pub fn set_zipcode(zip: [u8; 5]) -> bool {
@@ -66,8 +82,11 @@ pub fn set_zipcode(zip: [u8; 5]) -> bool {
     }
     critical_section::with(|cs| {
         let mut state = WEATHER_STATE.borrow_ref_mut(cs);
-        state.zip = zip;
         state.refresh_now = true;
+        if state.zip != zip {
+            state.cached_geo = None;
+        }
+        state.zip = zip;
     });
     info!("Weather: ZIP set to {}", zip_to_string(&zip).as_str());
     true
@@ -88,6 +107,24 @@ fn take_refresh_flag() -> bool {
         state.refresh_now = false;
         flag
     })
+}
+
+fn get_cached_geo(zip: &[u8; 5]) -> Option<GeoLocation> {
+    critical_section::with(|cs| {
+        let state = WEATHER_STATE.borrow_ref(cs);
+        if let Some((ref cached_zip, ref geo)) = state.cached_geo {
+            if cached_zip == zip {
+                return Some(geo.clone());
+            }
+        }
+        None
+    })
+}
+
+fn set_cached_geo(zip: [u8; 5], geo: GeoLocation) {
+    critical_section::with(|cs| {
+        WEATHER_STATE.borrow_ref_mut(cs).cached_geo = Some((zip, geo));
+    });
 }
 
 pub fn request_refresh() {
@@ -268,7 +305,7 @@ pub async fn weather_task<H: HttpGet>(
     poll_interval: Duration,
     now_unix: fn() -> Option<u64>,
 ) -> ! {
-    let mut response_buf = [0u8; 768];
+    let mut response_buf = [0u8; 1536];
 
     info!("Weather: task start (poll {:?})", poll_interval);
 
@@ -283,13 +320,17 @@ pub async fn weather_task<H: HttpGet>(
                 Duration::from_secs(7)
             };
             Timer::after(wait).await;
-            if take_refresh_flag() {
-                continue;
-            }
+            // Drain any flag set during the wait so we pick up the latest ZIP
+            let _ = take_refresh_flag();
         }
 
         let zip = get_zipcode();
-        info!("Weather: fetching for ZIP {}", zip_to_string(&zip).as_str());
+        if !is_valid_zip(&zip) || zip == *b"00000" {
+            info!("Weather: skipping fetch (invalid/unset ZIP)");
+            Timer::after(Duration::from_secs(10)).await;
+            continue;
+        }
+
         let now = if let Some(n) = now_unix() {
             n
         } else {
@@ -298,31 +339,98 @@ pub async fn weather_task<H: HttpGet>(
             continue;
         };
 
-        let result = with_timeout(
-            Duration::from_secs(10),
-            fetch_weather(&mut http, &zip, now, &mut response_buf),
+        info!("Weather: fetching for ZIP {}", zip_to_string(&zip).as_str());
+
+        // Step 1: Geocode (use cache if available for this ZIP)
+        let geo = if let Some(cached) = get_cached_geo(&zip) {
+            info!("Weather: using cached location: {}", cached.name.as_str());
+            cached
+        } else {
+            let geo_url = match build_geocode_url(&zip) {
+                Ok(u) => u,
+                Err(e) => {
+                    info!("Weather: geocode URL error: {}", e.display_name());
+                    record_error(e);
+                    continue;
+                }
+            };
+            let geo_result = with_timeout(
+                Duration::from_secs(15),
+                http.get(geo_url.as_str(), &mut response_buf),
+            )
+            .await;
+            match geo_result {
+                Ok(Ok(n)) => match parse_geocode(&response_buf[..n]) {
+                    Ok(g) => {
+                        info!("Weather: geocoded to {}", g.name.as_str());
+                        set_cached_geo(zip, g.clone());
+                        g
+                    }
+                    Err(e) => {
+                        info!("Weather: geocode parse error: {}", e.display_name());
+                        record_error(e);
+                        continue;
+                    }
+                },
+                Ok(Err(e)) => {
+                    info!("Weather: geocode request error: {}", e.display_name());
+                    record_error(e);
+                    continue;
+                }
+                Err(_) => {
+                    info!("Weather: geocode timeout");
+                    record_error(WeatherError::Timeout);
+                    continue;
+                }
+            }
+        };
+
+        // Step 2: Fetch forecast
+        let forecast_url = match build_forecast_url(geo.latitude, geo.longitude) {
+            Ok(u) => u,
+            Err(e) => {
+                info!("Weather: forecast URL error: {}", e.display_name());
+                record_error(e);
+                continue;
+            }
+        };
+        let forecast_result = with_timeout(
+            Duration::from_secs(15),
+            http.get(forecast_url.as_str(), &mut response_buf),
         )
         .await;
-
-        match result {
-            Ok(Ok(weather)) => {
-                info!(
-                    "Weather fetch ok: {}F code {}",
-                    weather.temperature_f, weather.weather_code
-                );
-                record_success(weather)
-            }
+        match forecast_result {
+            Ok(Ok(n)) => match parse_forecast(&response_buf[..n]) {
+                Ok((temp_f, code)) => {
+                    info!(
+                        "Weather: {}F code={} at {}",
+                        temp_f,
+                        code,
+                        geo.name.as_str()
+                    );
+                    record_success(Weather {
+                        temperature_f: temp_f,
+                        weather_code: code,
+                        location_name: geo.name,
+                        fetched_unix: now,
+                    });
+                }
+                Err(e) => {
+                    info!("Weather: forecast parse error: {}", e.display_name());
+                    record_error(e);
+                }
+            },
             Ok(Err(e)) => {
-                info!("Weather fetch error");
-                record_error(e)
+                info!("Weather: forecast request error: {}", e.display_name());
+                record_error(e);
             }
             Err(_) => {
-                info!("Weather fetch timeout");
-                record_error(WeatherError::Timeout)
+                info!("Weather: forecast timeout");
+                record_error(WeatherError::Timeout);
             }
         }
 
-        // If we have never succeeded yet, back off briefly before the next attempt.
+        // Brief backoff if we've never succeeded
         if get_last_ok_unix().is_none() {
             Timer::after(Duration::from_secs(5)).await;
         }

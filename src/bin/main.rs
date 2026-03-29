@@ -167,7 +167,7 @@ async fn main(spawner: Spawner) -> ! {
         esp_radio::wifi::new(radio_init, peripherals.WIFI, Default::default())
             .expect("Wi-Fi init failed");
 
-    static NET_RESOURCES: static_cell::StaticCell<embassy_net::StackResources<3>> =
+    static NET_RESOURCES: static_cell::StaticCell<embassy_net::StackResources<5>> =
         static_cell::StaticCell::new();
     let (stack, runner) = embassy_net::new(
         interfaces.sta,
@@ -182,10 +182,10 @@ async fn main(spawner: Spawner) -> ! {
         .unwrap();
 
     // Weather HTTP client + polling task
-    static TCP_STATE: static_cell::StaticCell<TcpClientState<1, 1024, 1024>> =
+    static TCP_STATE: static_cell::StaticCell<TcpClientState<1, 4096, 4096>> =
         static_cell::StaticCell::new();
     let tcp_state = TCP_STATE.init(TcpClientState::new());
-    static TCP_CLIENT: static_cell::StaticCell<TcpClient<1, 1024, 1024>> =
+    static TCP_CLIENT: static_cell::StaticCell<TcpClient<1, 4096, 4096>> =
         static_cell::StaticCell::new();
     let tcp_client = TCP_CLIENT.init(TcpClient::new(stack, tcp_state));
     static DNS_SOCKET: static_cell::StaticCell<DnsSocket> = static_cell::StaticCell::new();
@@ -209,8 +209,7 @@ async fn main(spawner: Spawner) -> ! {
 
     // Settings + alarm — load from flash or use defaults
     let mut settings = storage::load().unwrap_or_default();
-    // Force ZIP to 88005 for on-device testing
-    settings.zipcode = *b"88005";
+
     let mut alarm = Alarm::new();
     weather::set_zipcode(settings.zipcode);
     alarm.snooze_duration = Duration::from_secs(settings.snooze_minutes as u64 * 60);
@@ -227,33 +226,6 @@ async fn main(spawner: Spawner) -> ! {
         app.set_setting_theme_name(t.name.into());
     }
 
-    fn zip_bytes_to_int(zip: &[u8; 5]) -> i32 {
-        let mut val: i32 = 0;
-        for &b in zip {
-            if !b.is_ascii_digit() {
-                return 0;
-            }
-            val = val * 10 + (b - b'0') as i32;
-        }
-        val
-    }
-
-    fn zip_int_to_bytes(zip: i32) -> [u8; 5] {
-        let mut n = if zip < 0 {
-            0
-        } else if zip > 99999 {
-            99999
-        } else {
-            zip
-        };
-        let mut out = [b'0'; 5];
-        for i in (0..5).rev() {
-            out[i] = b'0' + (n % 10) as u8;
-            n /= 10;
-        }
-        out
-    }
-
     fn push_settings_to_slint(app: &MainWindow, settings: &Settings) {
         app.set_setting_alarm_hour(settings.alarm_hour as i32);
         app.set_setting_alarm_minute(settings.alarm_minute as i32);
@@ -264,7 +236,11 @@ async fn main(spawner: Spawner) -> ! {
         app.set_setting_timeout_min(settings.timeout_minutes as i32);
         app.set_setting_use_12h(settings.use_12h);
         app.set_setting_theme_index(settings.theme_index as i32);
-        app.set_setting_zip(zip_bytes_to_int(&settings.zipcode));
+        app.set_setting_zip_d0((settings.zipcode[0] - b'0') as i32);
+        app.set_setting_zip_d1((settings.zipcode[1] - b'0') as i32);
+        app.set_setting_zip_d2((settings.zipcode[2] - b'0') as i32);
+        app.set_setting_zip_d3((settings.zipcode[3] - b'0') as i32);
+        app.set_setting_zip_d4((settings.zipcode[4] - b'0') as i32);
         apply_theme(app, settings);
     }
 
@@ -278,7 +254,13 @@ async fn main(spawner: Spawner) -> ! {
         settings.timeout_minutes = app.get_setting_timeout_min() as u8;
         settings.use_12h = app.get_setting_use_12h();
         settings.theme_index = app.get_setting_theme_index() as u8;
-        settings.zipcode = zip_int_to_bytes(app.get_setting_zip());
+        settings.zipcode = [
+            b'0' + app.get_setting_zip_d0() as u8,
+            b'0' + app.get_setting_zip_d1() as u8,
+            b'0' + app.get_setting_zip_d2() as u8,
+            b'0' + app.get_setting_zip_d3() as u8,
+            b'0' + app.get_setting_zip_d4() as u8,
+        ];
     }
 
     push_settings_to_slint(&app, &settings);
@@ -382,18 +364,23 @@ async fn main(spawner: Spawner) -> ! {
 
                 // Weather UI (offline-safe)
                 let mut wtext = heapless::String::<16>::new();
-                let mut stext = heapless::String::<32>::new();
+                let mut stext = heapless::String::<40>::new();
 
                 if let Some(w) = weather::get_last_weather() {
                     let _ = write!(wtext, "{}°F", w.temperature_f);
                     let _ = stext.push_str(w.location_name.as_str());
+                    if let Some(e) = weather::get_last_error() {
+                        let _ = stext.push_str(" (");
+                        let _ = stext.push_str(e.display_name());
+                        let _ = stext.push_str(")");
+                    }
                 } else {
                     let _ = wtext.push_str("--");
-                    let _ = stext.push_str("Weather: offline");
-                }
-
-                if weather::get_last_error().is_some() && weather::get_last_weather().is_some() {
-                    let _ = stext.push_str(" (stale)");
+                    if let Some(e) = weather::get_last_error() {
+                        let _ = write!(stext, "Weather: {}", e.display_name());
+                    } else {
+                        let _ = stext.push_str("Weather: waiting");
+                    }
                 }
 
                 app.set_weather_text(wtext.as_str().into());
@@ -497,7 +484,7 @@ async fn main(spawner: Spawner) -> ! {
 }
 
 #[embassy_executor::task]
-async fn weather_runner(http: WeatherHttpClient<'static, 1, 1024, 1024>) -> ! {
+async fn weather_runner(http: WeatherHttpClient<'static, 1, 4096, 4096>) -> ! {
     weather::weather_task(http, Duration::from_secs(900), now_unix).await
 }
 

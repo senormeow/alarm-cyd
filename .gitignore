@@ -1,6 +1,9 @@
 # will have compiled files and executables
 debug/
 target/
+
+# Environment secrets (Wi-Fi credentials, API keys)
+.env
 .vscode/
 .zed/
 .helix/
