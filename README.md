@@ -2,7 +2,9 @@
 
 This is a project to write an alarm clock for the ESP32-2432S028 (aka "CYD") written in Rust using Embassy.
 
-Display, touch, speaker, RGB LEDs, Wi-Fi, NTP clock, Slint GUI, full settings screen, color theming, alarm engine, and flash-based settings persistence are all working.
+Display, touch, speaker, RGB LEDs, Wi-Fi, NTP clock, Slint GUI, full settings screen, color theming, alarm engine, weather via Open-Meteo, and flash-based settings persistence are all working.
+
+Wi-Fi credentials are stored in a `.env` file (gitignored) and injected at compile time — see [Building](#building).
 
 ## Roadmap
 
@@ -139,10 +141,10 @@ peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
 ### ✅ Phase 4 — Weather Service
 
 **Implementation summary:**
-- Uses Open-Meteo (no API key): geocoding ZIP → lat/lon, then current forecast (temp °F + weather code).
-- New `src/weather.rs`: buffer-based HTTP client over embassy-net/reqwless + DNS, JSON via `serde-json-core`, shared state with last weather/error/timestamps, background polling task with fast retry until first success and time/DHCP-aware backoff.
-- Settings: 5-digit ZIP added to `Settings`, persisted via NVS, wired to Slint UI pickers; Rust pushes/pulls ZIP and requests immediate refresh on changes.
-- UI: weather text/status shown on clock face (moved above buttons), displays temp and location, tags stale data when errors occur.
+- Uses Open-Meteo (no API key): geocoding ZIP → lat/lon (cached), then current forecast (temp °F + weather code).
+- `src/weather.rs`: buffer-based HTTP client over embassy-net/reqwless + DNS (TCP 4096/4096 buffers, 1536-byte response buffer), JSON via `serde-json-core`, shared state via `critical_section::Mutex`, 15s per-request timeout, geocoding results cached until ZIP changes.
+- Settings: 5-digit ZIP added to `Settings`, persisted via NVS; per-digit editor in Slint UI (each digit has its own +/- buttons); Rust pushes/pulls ZIP and requests immediate refresh on changes.
+- UI: weather text/status shown on clock face (above buttons), displays temp and location name; shows specific error type (timeout/net error/parse error/etc.) when fetches fail.
 
 **Tasks:**
 - [x] HTTP client via embassy-net TCP
@@ -159,15 +161,17 @@ peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
 
 ## Building
 
-Source the ESP toolchain environment before building:
+First, create a `.env` file with your Wi-Fi credentials:
+
+```
+cp .env.example .env
+# edit .env with your SSID and password
+```
+
+Source the ESP toolchain environment, then build:
 
 ```
 . $HOME/export-esp.sh
-```
-
-Then build with:
-
-```
 cargo build
 ```
 
@@ -181,7 +185,7 @@ sensor. Connectors on the board use 1.25mm Molex PicoBlade (often sold as "mx1.2
 
 ### SPI2 (HSPI) — Display
 
-Runs at 40 MHz.
+Runs at 80 MHz.
 
 | Pin    | Function  | Notes          |
 |--------|-----------|----------------|

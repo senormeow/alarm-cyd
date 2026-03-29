@@ -5,34 +5,31 @@ ESP32-2432S028 ("CYD") smart alarm clock in Rust using Embassy async runtime.
 
 ## Build
 ```
-. $HOME/export-esp.sh   # source ESP toolchain first
+cp .env.example .env     # then edit .env with your Wi-Fi credentials
+. $HOME/export-esp.sh    # source ESP toolchain
 cargo build
 ```
 
 ## Hardware
 - **MCU**: ESP32 dual-core 240MHz, 520KB SRAM, 98KB heap (`.dram2_uninit`)
-- **Display**: ILI9341 240x320 TFT on SPI2 @ 40MHz, landscape via Rotation::Deg90 = 320x240
+- **Display**: ILI9341 240x320 TFT on SPI2 @ 80MHz, landscape via Rotation::Deg90 = 320x240
 - **Touch**: XPT2046 resistive on SPI3 @ 1MHz, calibrated with affine transform
 - **Speaker**: GPIO26 via LEDC PWM (1% duty = comfortable volume)
 - **RGB LED**: Active-low on GPIO 4/16/17
-- **Wi-Fi**: esp-radio + embassy-net, credentials in `src/network.rs`
+- **Wi-Fi**: esp-radio + embassy-net, credentials via `env!()` macros loaded from `.env` file at compile time
 
 ## Architecture
 - `src/bin/main.rs` — entry point, hardware init, Slint main loop, alarm time-match trigger
 - `src/slint_backend.rs` — Esp32Platform + DisplayLine (Slint rendering adapter)
-- `src/network.rs` — Wi-Fi connection task, embassy-net stack runner, `now_with_offset()`
+- `src/network.rs` — Wi-Fi connection task, embassy-net stack runner, NTP sync, `now_with_offset()`
 - `src/xpt2046/mod.rs` — touch driver with calibration (do not modify calibration data without re-calibrating)
 - `src/alarm.rs` — AlarmState machine (Idle/Ringing/Snoozed), speaker ramp, snooze countdown, auto-timeout
 - `src/settings.rs` — Settings struct, Theme/THEMES array (Midnight/Sunny/Fire/Water), Default impl
 - `src/storage.rs` — flash persistence via `esp_rom_spiflash_*` ROM calls; sector 0x3FF000, bincode/serde serialization with magic+version+XOR checksum
-- `ui/main.slint` — Slint UI: clock face, alarm buttons, full settings screen with all pickers
-- `build.rs` — must use `EmbedForSoftwareRenderer` (fonts are pre-baked at build time; without this, runtime font rendering OOMs the 98KB heap)
-
-## Phase 4 — Weather Service (implemented)
-- Open‑Meteo (no API key): geocoding ZIP → lat/lon, then current forecast (temp °F + weather_code).
-- `src/weather.rs`: buffer-based reqwless/embassy-net HTTP + DNS, JSON via `serde-json-core`, shared state with last weather/error/attempt/ok time, 10s timeout, no panics. Fast retry until first success, skips fetch until NTP/time available, then polls every 15 minutes; manual refresh flag.
-- Settings: 5‑digit ZIP added to `Settings`, persisted via NVS; Slint UI pickers wired; Rust pushes/pulls ZIP and requests refresh on change.
-- UI: weather text/status shown on clock face (above buttons), displays temperature and location name; indicates stale data when errors occur.
+- `src/weather.rs` — Open-Meteo weather service: geocoding (ZIP→lat/lon, cached), forecast polling, shared state via `critical_section::Mutex`, `WeatherHttpClient` (reqwless + embassy-net TCP/DNS)
+- `ui/main.slint` — Slint UI: clock face, alarm buttons, full settings screen with per-digit ZIP editor
+- `build.rs` — loads `.env` for Wi-Fi credentials (`cargo:rustc-env`), must use `EmbedForSoftwareRenderer` (fonts are pre-baked at build time; without this, runtime font rendering OOMs the 98KB heap)
+- `.env` — Wi-Fi credentials (gitignored); `.env.example` is the checked-in template
 
 ## Key Constraints
 - `#![no_std]` — no standard library
@@ -40,3 +37,5 @@ cargo build
 - Slint uses `unsafe-single-threaded` feature — all Slint access must stay on the main task
 - `RepaintBufferType::NewBuffer` is required (no retained framebuffer)
 - Display controller is ILI9341 (NOT ILI9486 — the CYD board was misidentified initially)
+- TCP buffers are 4096 TX / 4096 RX (static); `StackResources<5>` for embassy-net sockets
+- Weather response buffer is 1536 bytes (stack-allocated in weather task)
