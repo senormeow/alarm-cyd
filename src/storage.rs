@@ -14,7 +14,7 @@ const SETTINGS_ADDR: u32 = 0x3F_F000;
 const SETTINGS_SECTOR: u32 = SETTINGS_ADDR / 4096;
 
 const MAGIC: u8 = 0xA5;
-const VERSION: u8 = 2;
+const VERSION: u8 = 3;
 
 // Wire format: [magic, version, bincode_data..., checksum]
 const PADDED_LEN: usize = 32; // must be multiple of 4 for flash alignment

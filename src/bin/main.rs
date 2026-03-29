@@ -43,7 +43,11 @@ use alarm_cyd::network;
 use alarm_cyd::settings::Settings;
 use alarm_cyd::slint_backend::{DisplayLine, Esp32Platform};
 use alarm_cyd::storage;
+use alarm_cyd::weather;
+use alarm_cyd::weather::WeatherHttpClient;
 use alarm_cyd::xpt2046::Xpt2046;
+use embassy_net::dns::DnsSocket;
+use embassy_net::tcp::client::{TcpClient, TcpClientState};
 
 slint::include_modules!();
 
@@ -177,6 +181,18 @@ async fn main(spawner: Spawner) -> ! {
         .spawn(network::wifi_task(wifi_controller, stack))
         .unwrap();
 
+    // Weather HTTP client + polling task
+    static TCP_STATE: static_cell::StaticCell<TcpClientState<1, 1024, 1024>> =
+        static_cell::StaticCell::new();
+    let tcp_state = TCP_STATE.init(TcpClientState::new());
+    static TCP_CLIENT: static_cell::StaticCell<TcpClient<1, 1024, 1024>> =
+        static_cell::StaticCell::new();
+    let tcp_client = TCP_CLIENT.init(TcpClient::new(stack, tcp_state));
+    static DNS_SOCKET: static_cell::StaticCell<DnsSocket> = static_cell::StaticCell::new();
+    let dns_socket = DNS_SOCKET.init(DnsSocket::new(stack));
+    let http = WeatherHttpClient::new(tcp_client, dns_socket);
+    spawner.spawn(weather_runner(http)).unwrap();
+
     // --- Set up Slint ---
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     window.set_size(slint::PhysicalSize::new(320, 240));
@@ -193,7 +209,10 @@ async fn main(spawner: Spawner) -> ! {
 
     // Settings + alarm — load from flash or use defaults
     let mut settings = storage::load().unwrap_or_default();
+    // Force ZIP to 88005 for on-device testing
+    settings.zipcode = *b"88005";
     let mut alarm = Alarm::new();
+    weather::set_zipcode(settings.zipcode);
     alarm.snooze_duration = Duration::from_secs(settings.snooze_minutes as u64 * 60);
     alarm.auto_timeout = Duration::from_secs(settings.timeout_minutes as u64 * 60);
 
@@ -208,6 +227,33 @@ async fn main(spawner: Spawner) -> ! {
         app.set_setting_theme_name(t.name.into());
     }
 
+    fn zip_bytes_to_int(zip: &[u8; 5]) -> i32 {
+        let mut val: i32 = 0;
+        for &b in zip {
+            if !b.is_ascii_digit() {
+                return 0;
+            }
+            val = val * 10 + (b - b'0') as i32;
+        }
+        val
+    }
+
+    fn zip_int_to_bytes(zip: i32) -> [u8; 5] {
+        let mut n = if zip < 0 {
+            0
+        } else if zip > 99999 {
+            99999
+        } else {
+            zip
+        };
+        let mut out = [b'0'; 5];
+        for i in (0..5).rev() {
+            out[i] = b'0' + (n % 10) as u8;
+            n /= 10;
+        }
+        out
+    }
+
     fn push_settings_to_slint(app: &MainWindow, settings: &Settings) {
         app.set_setting_alarm_hour(settings.alarm_hour as i32);
         app.set_setting_alarm_minute(settings.alarm_minute as i32);
@@ -218,6 +264,7 @@ async fn main(spawner: Spawner) -> ! {
         app.set_setting_timeout_min(settings.timeout_minutes as i32);
         app.set_setting_use_12h(settings.use_12h);
         app.set_setting_theme_index(settings.theme_index as i32);
+        app.set_setting_zip(zip_bytes_to_int(&settings.zipcode));
         apply_theme(app, settings);
     }
 
@@ -231,6 +278,7 @@ async fn main(spawner: Spawner) -> ! {
         settings.timeout_minutes = app.get_setting_timeout_min() as u8;
         settings.use_12h = app.get_setting_use_12h();
         settings.theme_index = app.get_setting_theme_index() as u8;
+        settings.zipcode = zip_int_to_bytes(app.get_setting_zip());
     }
 
     push_settings_to_slint(&app, &settings);
@@ -276,6 +324,8 @@ async fn main(spawner: Spawner) -> ! {
             alarm.snooze_duration = Duration::from_secs(settings.snooze_minutes as u64 * 60);
             alarm.auto_timeout = Duration::from_secs(settings.timeout_minutes as u64 * 60);
             storage::save(&settings);
+            weather::set_zipcode(settings.zipcode);
+            weather::request_refresh();
         }
 
         // Update clock display when the second changes
@@ -329,6 +379,25 @@ async fn main(spawner: Spawner) -> ! {
                     dt.day(),
                 );
                 app.set_date_text(dbuf.as_str().into());
+
+                // Weather UI (offline-safe)
+                let mut wtext = heapless::String::<16>::new();
+                let mut stext = heapless::String::<32>::new();
+
+                if let Some(w) = weather::get_last_weather() {
+                    let _ = write!(wtext, "{}°F", w.temperature_f);
+                    let _ = stext.push_str(w.location_name.as_str());
+                } else {
+                    let _ = wtext.push_str("--");
+                    let _ = stext.push_str("Weather: offline");
+                }
+
+                if weather::get_last_error().is_some() && weather::get_last_weather().is_some() {
+                    let _ = stext.push_str(" (stale)");
+                }
+
+                app.set_weather_text(wtext.as_str().into());
+                app.set_weather_status_text(stext.as_str().into());
 
                 // Time-based alarm trigger (fires at :00 of the alarm minute)
                 if sec == 0 && settings.alarm_enabled && alarm.state() == AlarmState::Idle {
@@ -425,6 +494,15 @@ async fn main(spawner: Spawner) -> ! {
 
         Timer::after(Duration::from_millis(16)).await; // ~60 fps
     }
+}
+
+#[embassy_executor::task]
+async fn weather_runner(http: WeatherHttpClient<'static, 1, 1024, 1024>) -> ! {
+    weather::weather_task(http, Duration::from_secs(900), now_unix).await
+}
+
+fn now_unix() -> Option<u64> {
+    network::now_with_offset(0).map(|dt| dt.unix_timestamp() as u64)
 }
 
 fn slint_color(rgb: u32) -> slint::Color {

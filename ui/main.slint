@@ -4,7 +4,8 @@ export component MainWindow inherits Window {
 
     in-out property <string> time-text: "00:00:00";
     in-out property <string> date-text: "---";
-    in-out property <string> room-temp-text: "";
+    in-out property <string> weather-text: "";
+    in-out property <string> weather-status-text: "";
     // 0 = idle, 1 = ringing, 2 = snoozed
     in-out property <int> alarm-state: 0;
     in-out property <string> alarm-status-text: "";
@@ -29,6 +30,7 @@ export component MainWindow inherits Window {
     in-out property <bool> setting-use-12h: true;
     in-out property <int> setting-theme-index: 0;
     in-out property <string> setting-theme-name: "Midnight";
+    in-out property <int> setting-zip: 0;
 
     callback test-alarm();
     callback snooze-alarm();
@@ -82,15 +84,26 @@ export component MainWindow inherits Window {
             horizontal-alignment: center;
         }
 
-        // Room temperature bottom-right
+        // Room temperature above buttons
         Text {
-            text: root.room-temp-text;
+            text: root.weather-text;
             color: root.theme-accent;
             font-size: 14px;
-            x: 210px;
-            y: 218px;
-            width: 100px;
+            x: 90px;
+            y: 150px;
+            width: 220px;
             horizontal-alignment: right;
+        }
+
+        // Weather status above buttons
+        Text {
+            text: root.weather-status-text;
+            color: root.theme-date;
+            font-size: 12px;
+            x: 12px;
+            y: 168px;
+            width: 220px;
+            horizontal-alignment: left;
         }
 
         // Alarm indicator (top-right) — shows set time when enabled
@@ -540,6 +553,42 @@ export component MainWindow inherits Window {
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
+        }
+
+        // --- Row 5: ZIP code ---
+        Text { text: "ZIP"; color: #808080; font-size: 14px; x: 10px; y: 160px; }
+
+        Rectangle {
+            x: 50px; y: 156px; width: 28px; height: 24px;
+            background: ta-zipm.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-zipm := TouchArea {
+                clicked => { root.setting-zip = root.setting-zip <= 0 ? 99999 : root.setting-zip - 1; }
+            }
+            Text { text: "-"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Text {
+            text: root.setting-zip < 10 ? "0000" + root.setting-zip
+                : root.setting-zip < 100 ? "000" + root.setting-zip
+                : root.setting-zip < 1000 ? "00" + root.setting-zip
+                : root.setting-zip < 10000 ? "0" + root.setting-zip
+                : root.setting-zip;
+            color: #ffffff;
+            font-size: 14px;
+            x: 82px; y: 160px;
+            width: 60px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            x: 145px; y: 156px; width: 28px; height: 24px;
+            background: ta-zipp.pressed ? #404040 : #252525;
+            border-radius: 3px;
+            ta-zipp := TouchArea {
+                clicked => { root.setting-zip = root.setting-zip >= 99999 ? 0 : root.setting-zip + 1; }
+            }
+            Text { text: "+"; color: #ffffff; font-size: 16px; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
         }
     }
 }

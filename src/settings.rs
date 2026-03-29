@@ -67,6 +67,8 @@ pub struct Settings {
     pub use_12h: bool,
     /// Theme index into THEMES
     pub theme_index: u8,
+    /// 5-digit ZIP code for weather lookup (ASCII digits)
+    pub zipcode: [u8; 5],
 }
 
 impl Default for Settings {
@@ -81,6 +83,7 @@ impl Default for Settings {
             timeout_minutes: 10,
             use_12h: true,
             theme_index: 0,
+            zipcode: *b"88005",
         }
     }
 }
@@ -101,5 +104,26 @@ impl Settings {
             (h, true) => h,
             (h, false) => h + 12,
         }
+    }
+
+    /// ZIP code as a 5-character ASCII string (e.g., "02139").
+    pub fn zipcode_str(&self) -> &str {
+        core::str::from_utf8(&self.zipcode).unwrap_or("00000")
+    }
+
+    /// Set ZIP code from a 5-character ASCII string containing digits.
+    pub fn set_zipcode_from_str(&mut self, zip: &str) {
+        let bytes = zip.as_bytes();
+        if bytes.len() != 5 {
+            return;
+        }
+        let mut out = [0u8; 5];
+        for (i, &b) in bytes.iter().enumerate() {
+            if !(b'0'..=b'9').contains(&b) {
+                return;
+            }
+            out[i] = b;
+        }
+        self.zipcode = out;
     }
 }

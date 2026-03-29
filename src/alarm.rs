@@ -94,10 +94,7 @@ impl Alarm {
                 }
 
                 // Ramp duty: 1% at start, up to 5% over 30 seconds
-                let elapsed_ms = self
-                    .ring_start
-                    .map(|s| (now - s).as_millis())
-                    .unwrap_or(0);
+                let elapsed_ms = self.ring_start.map(|s| (now - s).as_millis()).unwrap_or(0);
                 let ramp = (elapsed_ms / 7500) as u8; // 0..4 over 30s
                 let duty = 1 + ramp.min(4);
 

@@ -136,11 +136,20 @@ peripherals. Switching to ESP32-S3 should only require changes to `main.rs` and
 - [x] Load settings on boot, save on settings-changed callback
 - [x] Handle first-boot (uninitialized flash) gracefully with defaults
 
-### 🔄 Phase 4 — Weather Service
-- [ ] HTTP client via embassy-net TCP
-- [ ] Open-Meteo API integration (free, no API key)
-- [ ] JSON parsing (serde_json_core)
-- [ ] Outside temp & forecast display
+### ✅ Phase 4 — Weather Service
+
+**Implementation summary:**
+- Uses Open-Meteo (no API key): geocoding ZIP → lat/lon, then current forecast (temp °F + weather code).
+- New `src/weather.rs`: buffer-based HTTP client over embassy-net/reqwless + DNS, JSON via `serde-json-core`, shared state with last weather/error/timestamps, background polling task with fast retry until first success and time/DHCP-aware backoff.
+- Settings: 5-digit ZIP added to `Settings`, persisted via NVS, wired to Slint UI pickers; Rust pushes/pulls ZIP and requests immediate refresh on changes.
+- UI: weather text/status shown on clock face (moved above buttons), displays temp and location, tags stale data when errors occur.
+
+**Tasks:**
+- [x] HTTP client via embassy-net TCP
+- [x] Open-Meteo geocoding + forecast integration (free, no API key)
+- [x] JSON parsing (serde-json-core)
+- [x] ZIP code setting + persistence
+- [x] Outside temp & forecast display
 
 
 ### 🔄 Phase 5 — Room Temperature (DS18B20)

@@ -26,6 +26,7 @@ esp-bootloader-esp-idf = { version = "0.3.0", features = ["esp32"] }
 embassy-net = { version = "0.7.0", features = [
   "defmt",
   "dhcpv4",
+  "dns",
   "medium-ethernet",
   "tcp",
   "udp",
@@ -72,6 +73,8 @@ time = { version = "0.3", default-features = false }
 heapless = "0.8"
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 bincode = { version = "2.0.1", default-features = false, features = ["serde"] }
+serde-json-core = "0.6.0"
+reqwless = { version = "0.13.0", default-features = false, features = ["defmt"] }
 
 [build-dependencies]
 slint-build = "1.9"

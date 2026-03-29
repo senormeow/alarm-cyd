@@ -15,6 +15,10 @@ const NTP_SERVER: Ipv4Address = Ipv4Address::new(216, 239, 35, 0);
 const NTP_PORT: u16 = 123;
 const NTP_TO_UNIX: u64 = 2_208_988_800;
 
+// --- Networking helpers (DNS/TCP-ready scaffolding) ---
+// NOTE: DNS/TCP clients will be added here for the weather service.
+// Keep this module hardware-agnostic; use Stack-provided APIs.
+
 // --- Shared time state ---
 
 struct TimeSync {

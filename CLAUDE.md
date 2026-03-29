@@ -28,6 +28,12 @@ cargo build
 - `ui/main.slint` — Slint UI: clock face, alarm buttons, full settings screen with all pickers
 - `build.rs` — must use `EmbedForSoftwareRenderer` (fonts are pre-baked at build time; without this, runtime font rendering OOMs the 98KB heap)
 
+## Phase 4 — Weather Service (implemented)
+- Open‑Meteo (no API key): geocoding ZIP → lat/lon, then current forecast (temp °F + weather_code).
+- `src/weather.rs`: buffer-based reqwless/embassy-net HTTP + DNS, JSON via `serde-json-core`, shared state with last weather/error/attempt/ok time, 10s timeout, no panics. Fast retry until first success, skips fetch until NTP/time available, then polls every 15 minutes; manual refresh flag.
+- Settings: 5‑digit ZIP added to `Settings`, persisted via NVS; Slint UI pickers wired; Rust pushes/pulls ZIP and requests refresh on change.
+- UI: weather text/status shown on clock face (above buttons), displays temperature and location name; indicates stale data when errors occur.
+
 ## Key Constraints
 - `#![no_std]` — no standard library
 - Heap is exactly 98767 bytes (full capacity of `dram2_seg`), cannot increase without using a different DRAM region
